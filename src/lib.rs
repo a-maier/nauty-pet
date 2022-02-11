@@ -42,6 +42,8 @@ mod tests {
             for i in 0..n-2 {
                 add_edge(&mut g1, i, i + 2, ());
             }
+            add_edge(&mut g1, 1, n - 2, ());
+            add_edge(&mut g1, 0, n - 1, ());
 
             let mut g2 = UnGraph::<(), ()>::with_capacity(n, 3*n);
             for _ in 0..n {
@@ -50,7 +52,9 @@ mod tests {
 
             for i in 0..n {
                 add_edge(&mut g2, i, (i + 1) % n, ());     /* Rim */
-                add_edge(&mut g2, i, (i + n / 2) % n, ()); /* Diagonals */
+            }
+            for i in 0..(n / 2) {
+                add_edge(&mut g2, i, i + n / 2, ()); /* Diagonals */
             }
 
             /* Create canonical graphs */
