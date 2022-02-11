@@ -168,8 +168,8 @@ unsafe fn copy_sg(from: &sparsegraph, to: &mut SparseGraph) {
     use std::slice::from_raw_parts;
     debug_assert_eq!(from.nv as usize, to.v.len());
     debug_assert_eq!(from.vlen as usize, to.v.len());
-    debug_assert_eq!(from.nde as usize, to.d.len());
     debug_assert_eq!(from.dlen as usize, to.d.len());
+    debug_assert_eq!(from.nde as usize, to.e.len());
     debug_assert_eq!(from.elen as usize, to.e.len());
     let v = from_raw_parts(from.v, from.vlen as usize);
     let d = from_raw_parts(from.d, from.dlen as usize);
