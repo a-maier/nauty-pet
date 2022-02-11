@@ -103,7 +103,12 @@ where
     Graph<N, E, Ty, Ix>: CopyDeg + CopyEdges,
 {
     fn from(g: &Graph<N, E, Ty, Ix>) -> Self {
-        let mut sg = SparseGraph::new(g.node_count(), g.edge_count());
+        let edge_count = if g.is_directed() {
+            g.edge_count()
+        } else {
+            2 * g.edge_count()
+        };
+        let mut sg = SparseGraph::new(g.node_count(), edge_count);
         g.copy_degrees(&mut sg);
         update_edges_addr(&mut sg);
         g.copy_edges(&mut sg);
@@ -115,22 +120,12 @@ trait CopyDeg {
     fn copy_degrees(&self, sg: &mut SparseGraph);
 }
 
-impl<N, E, Ix: IndexType> CopyDeg for DiGraph<N, E, Ix> {
+impl<N, E, Ty: EdgeType, Ix: IndexType> CopyDeg for Graph<N, E, Ty, Ix> {
     fn copy_degrees(&self, sg: &mut SparseGraph) {
         use petgraph::visit::NodeIndexable;
         for v in self.node_indices() {
             let n = self.to_index(v);
             sg.d[n] = self.edges(v).count() as c_int;
-        }
-    }
-}
-
-impl<N, E, Ix: IndexType> CopyDeg for UnGraph<N, E, Ix> {
-    fn copy_degrees(&self, sg: &mut SparseGraph) {
-        use petgraph::visit::NodeIndexable;
-        for v in self.node_indices() {
-            let n = self.to_index(v);
-            sg.d[n] = 2 * self.edges(v).count() as c_int;
         }
     }
 }
@@ -151,7 +146,9 @@ impl<N, E, Ix: IndexType> CopyEdges for DiGraph<N, E, Ix> {
     fn copy_edges(&self, sg: &mut SparseGraph) {
         use petgraph::visit::NodeIndexable;
         for v in self.node_indices() {
-            let e = &mut sg.e[self.to_index(v)..];
+            let n = self.to_index(v);
+            let e_start = sg.v[n] as usize;
+            let e = &mut sg.e[e_start..];
             for (target, edge) in e.iter_mut().zip(self.edges(v)) {
                 debug_assert_eq!(edge.source(), v);
                 *target = self.to_index(edge.target()) as c_int;
@@ -164,7 +161,9 @@ impl<N, E, Ix: IndexType> CopyEdges for UnGraph<N, E, Ix> {
     fn copy_edges(&self, sg: &mut SparseGraph) {
         use petgraph::visit::NodeIndexable;
         for v in self.node_indices() {
-            let e = &mut sg.e[self.to_index(v)..];
+            let n = self.to_index(v);
+            let e_start = sg.v[n] as usize;
+            let e = &mut sg.e[e_start..];
             for (target, edge) in e.iter_mut().zip(self.edges(v)) {
                 let v2 = if v == edge.source() {
                     edge.target()
