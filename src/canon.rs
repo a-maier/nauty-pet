@@ -3,7 +3,7 @@ use crate::sparse_graph::{SparseDiGraph, SparseUnGraph};
 use std::hash::Hash;
 
 use nauty_Traces_sys::{
-    optionblk, sparsegraph, sparsenauty, statsblk, SparseGraph, Traces,
+    FALSE, optionblk, sparsegraph, sparsenauty, statsblk, SparseGraph, Traces,
     TracesOptions, TracesStats, SG_FREE, TRUE,
 };
 use petgraph::{
@@ -78,6 +78,7 @@ where
     fn to_canon_nauty_sparse(self) -> Self::Output {
         let mut options = optionblk::default_sparse();
         options.getcanon = TRUE;
+        options.defaultptn = FALSE;
         let mut stats = statsblk::default();
         let mut orbits = vec![0; self.node_count()];
         let mut sg: SparseUnGraph<_> = self.into();
@@ -109,6 +110,7 @@ where
     fn to_canon_nauty_sparse(self) -> Self::Output {
         let mut options = optionblk::default_sparse();
         options.getcanon = TRUE;
+        options.defaultptn = FALSE;
         let mut stats = statsblk::default();
         let mut orbits = vec![0; self.node_count()];
         let mut sg: SparseDiGraph<_> = self.into();
@@ -142,6 +144,7 @@ where
         }
         let mut options = TracesOptions {
             getcanon: TRUE,
+            defaultptn: FALSE,
             ..Default::default()
         };
         let mut stats = TracesStats::default();
