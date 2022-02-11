@@ -13,24 +13,31 @@ use petgraph::{
 };
 use thiserror::Error;
 
+/// Find the canonical labelling for a graph
+///
+/// Internally, this uses Traces for undirected graphs without
+/// self-loops and sparse nauty otherwise.
 pub trait ToCanon {
     type Output;
 
     fn to_canon(self) -> Self::Output;
 }
 
+/// Use sparse nauty to find the canonical labelling
 pub trait ToCanonNautySparse {
     type Output;
 
     fn to_canon_nauty_sparse(self) -> Self::Output;
 }
 
+/// Use dense nauty to find the canonical labelling
 pub trait ToCanonNautyDense {
     type Output;
 
     fn to_canon_nauty_dense(self) -> Self::Output;
 }
 
+/// Use Traces to find the canonical labelling
 pub trait ToCanonTraces {
     type Output;
 
