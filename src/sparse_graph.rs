@@ -10,16 +10,19 @@ use petgraph::{
     EdgeType,
 };
 
+#[derive(Debug, Default, Clone)]
 pub(crate) struct SparseDiGraph<N> {
     pub(crate) g: SparseGraph,
     pub(crate) weights: Weights<N>,
 }
 
+#[derive(Debug, Default, Clone)]
 pub(crate) struct SparseUnGraph<N> {
     pub(crate) g: SparseGraph,
     pub(crate) weights: Weights<N>,
 }
 
+#[derive(Debug, Default, Clone, Hash)]
 pub(crate) struct Weights<N> {
     pub(crate) lab: Vec<c_int>,
     pub(crate) ptn: Vec<c_int>,
