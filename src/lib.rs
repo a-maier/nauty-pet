@@ -24,6 +24,14 @@ mod tests {
         g.add_edge(g.from_index(v1), g.from_index(v2), wt)
     }
 
+    fn minmax<T: Ord>(t1: T, t2: T) -> (T, T) {
+        if t1 <= t2 {
+            (t1, t2)
+        } else {
+            (t2, t1)
+        }
+    }
+
     #[test]
     fn nautyex8() {
         let n_range = (2..20).step_by(2);
@@ -62,8 +70,17 @@ mod tests {
             let cg1 = g1.to_canon();
             let cg2 = g2.to_canon();
 
-            println!("{cg1:#?}");
-            println!("{cg2:#?}");
+            let (_, e1) = cg1.into_nodes_edges();
+            let mut e1 = Vec::from_iter(
+                e1.into_iter().map(|e| minmax(e.source(), e.target()))
+            );
+            e1.sort_unstable();
+            let (_, e2) = cg2.into_nodes_edges();
+            let mut e2 = Vec::from_iter(
+                e2.into_iter().map(|e| minmax(e.source(), e.target()))
+            );
+            e2.sort_unstable();
+            assert_eq!(e1, e2);
         }
     }
 }
