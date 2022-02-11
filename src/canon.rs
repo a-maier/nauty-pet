@@ -3,8 +3,8 @@ use crate::sparse_graph::{SparseDiGraph, SparseUnGraph};
 use std::hash::Hash;
 
 use nauty_Traces_sys::{
-    FALSE, optionblk, sparsegraph, sparsenauty, statsblk, SparseGraph, Traces,
-    TracesOptions, TracesStats, SG_FREE, TRUE,
+    optionblk, sparsegraph, sparsenauty, statsblk, SparseGraph, Traces,
+    TracesOptions, TracesStats, FALSE, SG_FREE, TRUE,
 };
 use petgraph::{
     graph::{DefaultIx, DiGraph, Graph, IndexType, UnGraph},
