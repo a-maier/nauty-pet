@@ -1,0 +1,16 @@
+[package]
+name = "nauty-pet"
+version = "0.1.0"
+edition = "2021"
+authors = ["Andreas Maier <andreas.martin.maier@desy.de>"]
+description = "Canonical graph labelling using nauty/Traces and petgraph"
+license = "Apache-2.0"
+readme = "Readme.md"
+keywords = ["graph-algorithms"]
+categories = ["mathematics"]
+repository = "https://github.com/a-maier/nauty-pet"
+
+[dependencies]
+petgraph = "0.6"
+nauty-Traces-sys = "0.2"
+itertools = "0.10.3"
