@@ -12,5 +12,5 @@ repository = "https://github.com/a-maier/nauty-pet"
 
 [dependencies]
 petgraph = "0.6"
-nauty-Traces-sys = "0.2"
-itertools = "0.10.3"
+nauty-Traces-sys = { version = "0.2", features = ["libc"] }
+thiserror = "1.0"

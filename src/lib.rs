@@ -1,4 +1,9 @@
+mod canon;
 mod sparse_graph;
+
+pub use canon::{
+    ToCanon, ToCanonNautyDense, ToCanonNautySparse, ToCanonTraces, TracesError,
+};
 
 #[cfg(test)]
 mod tests {
