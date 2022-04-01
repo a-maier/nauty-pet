@@ -1,13 +1,15 @@
-use crate::sparse_graph::{SparseDiGraph, SparseUnGraph};
+use crate::sparse_graph::SparseGraph;
 
-use std::hash::Hash;
+use std::cmp::Ord;
+
+use std::fmt::Debug;
 
 use nauty_Traces_sys::{
-    optionblk, sparsegraph, sparsenauty, statsblk, SparseGraph, Traces,
+    optionblk, sparsegraph, sparsenauty, statsblk, Traces,
     TracesOptions, TracesStats, FALSE, SG_FREE, TRUE,
 };
 use petgraph::{
-    graph::{DefaultIx, DiGraph, Graph, IndexType, UnGraph},
+    graph::{DiGraph, Graph, IndexType, UnGraph},
     visit::EdgeRef,
     EdgeType,
 };
@@ -17,180 +19,244 @@ use thiserror::Error;
 ///
 /// Internally, this uses Traces for undirected graphs without
 /// self-loops and sparse nauty otherwise.
-pub trait ToCanon {
-    type Output;
-
-    fn to_canon(self) -> Self::Output;
+pub trait IntoCanon {
+    fn into_canon(self) -> Self;
 }
 
 /// Use sparse nauty to find the canonical labelling
-pub trait ToCanonNautySparse {
-    type Output;
-
-    fn to_canon_nauty_sparse(self) -> Self::Output;
+pub trait IntoCanonNautySparse {
+    fn into_canon_nauty_sparse(self) -> Self;
 }
 
 /// Use dense nauty to find the canonical labelling
-pub trait ToCanonNautyDense {
-    type Output;
-
-    fn to_canon_nauty_dense(self) -> Self::Output;
+pub trait IntoCanonNautyDense {
+    fn into_canon_nauty_dense(self) -> Self;
 }
 
 /// Use Traces to find the canonical labelling
-pub trait ToCanonTraces {
-    type Output;
+pub trait TryIntoCanonTraces {
+    type Error;
 
-    fn to_canon_traces(self) -> Self::Output;
+    fn try_into_canon_traces(self) -> Result<Self, Self::Error>
+    where Self: Sized;
 }
 
-impl<N, Ix: IndexType> ToCanon for &UnGraph<N, (), Ix>
+impl<N, E, Ix: IndexType> IntoCanon for UnGraph<N, E, Ix>
 where
-    N: Clone + Default + Hash + Eq,
+    N: Ord,
+    E: Ord,
+N: Debug, E: Debug, Ix: Debug,
 {
-    type Output = UnGraph<N, (), DefaultIx>;
-
-    fn to_canon(self) -> Self::Output {
-        match self.to_canon_traces() {
+    fn into_canon(self) -> Self {
+        match self.try_into_canon_traces() {
             Ok(c) => c,
-            Err(TracesError::SelfLoop) => self.to_canon_nauty_sparse(),
+            Err(TracesError::SelfLoop(g)) => g.into_canon_nauty_sparse(),
         }
     }
 }
 
-impl<N, Ix: IndexType> ToCanon for &DiGraph<N, (), Ix>
+impl<N, E, Ix: IndexType> IntoCanon for DiGraph<N, E, Ix>
 where
-    N: Clone + Default + Hash + Eq,
+    N: Ord,
+    E: Ord,
+N: Debug, E: Debug, Ix: Debug,
 {
-    type Output = DiGraph<N, (), DefaultIx>;
-
-    fn to_canon(self) -> Self::Output {
-        self.to_canon_nauty_sparse()
+    fn into_canon(self) -> Self {
+        self.into_canon_nauty_sparse()
     }
 }
 
-impl<N, Ix: IndexType> ToCanonNautySparse for &UnGraph<N, (), Ix>
+impl<N, E, Ty, Ix: IndexType> IntoCanonNautySparse for Graph<N, E, Ty, Ix>
 where
-    N: Clone + Default + Hash + Eq,
+    N: Ord,
+    E: Ord,
+    Ty: EdgeType,
+N: Debug, E: Debug, Ix: Debug,
 {
-    type Output = UnGraph<N, (), DefaultIx>;
-
-    fn to_canon_nauty_sparse(self) -> Self::Output {
+    fn into_canon_nauty_sparse(self) -> Self {
         let mut options = optionblk::default_sparse();
         options.getcanon = TRUE;
         options.defaultptn = FALSE;
+        options.digraph = TRUE;
         let mut stats = statsblk::default();
         let mut orbits = vec![0; self.node_count()];
-        let mut sg: SparseUnGraph<_> = self.into();
+        let mut sg = SparseGraph::from(self);
         let mut cg = sparsegraph::default();
         unsafe {
             sparsenauty(
                 &mut (&mut sg.g).into(),
-                sg.weights.lab.as_mut_ptr(),
-                sg.weights.ptn.as_mut_ptr(),
+                sg.node_weights.lab.as_mut_ptr(),
+                sg.node_weights.ptn.as_mut_ptr(),
                 orbits.as_mut_ptr(),
                 &mut options,
                 &mut stats,
                 &mut cg,
             );
-            copy_sg(&cg, &mut sg.g);
             SG_FREE(&mut cg);
         }
-        (&sg).into()
+        sg.into()
     }
 }
 
-// TODO: code duplication
-impl<N, Ix: IndexType> ToCanonNautySparse for &DiGraph<N, (), Ix>
+impl<N, E, Ix: IndexType> TryIntoCanonTraces for UnGraph<N, E, Ix>
 where
-    N: Clone + Default + Hash + Eq,
+    N: Ord,
+    E: Ord,
+N: Debug, E: Debug, Ix: Debug,
 {
-    type Output = DiGraph<N, (), DefaultIx>;
+    type Error = TracesError<N, E, Ix>;
 
-    fn to_canon_nauty_sparse(self) -> Self::Output {
-        let mut options = optionblk::default_sparse();
-        options.getcanon = TRUE;
-        options.defaultptn = FALSE;
-        let mut stats = statsblk::default();
-        let mut orbits = vec![0; self.node_count()];
-        let mut sg: SparseDiGraph<_> = self.into();
-        let mut cg = sparsegraph::default();
-        unsafe {
-            sparsenauty(
-                &mut (&mut sg.g).into(),
-                sg.weights.lab.as_mut_ptr(),
-                sg.weights.ptn.as_mut_ptr(),
-                orbits.as_mut_ptr(),
-                &mut options,
-                &mut stats,
-                &mut cg,
-            );
-            copy_sg(&cg, &mut sg.g);
-            SG_FREE(&mut cg);
-        }
-        (&sg).into()
-    }
-}
-
-impl<N, Ix: IndexType> ToCanonTraces for &UnGraph<N, (), Ix>
-where
-    N: Clone + Default + Hash + Eq,
-{
-    type Output = Result<UnGraph<N, (), DefaultIx>, TracesError>;
-
-    fn to_canon_traces(self) -> Self::Output {
-        if has_self_loop(self) {
-            return Err(TracesError::SelfLoop);
+    fn try_into_canon_traces(self) -> Result<Self, Self::Error> {
+        if has_self_loop(&self) {
+            return Err(TracesError::SelfLoop(self));
         }
         let mut options = TracesOptions {
             getcanon: TRUE,
             defaultptn: FALSE,
+            digraph: TRUE,
             ..Default::default()
         };
         let mut stats = TracesStats::default();
         let mut orbits = vec![0; self.node_count()];
-        let mut sg: SparseUnGraph<_> = self.into();
+        let mut sg = SparseGraph::from(self);
         let mut cg = sparsegraph::default();
         unsafe {
             Traces(
                 &mut (&mut sg.g).into(),
-                sg.weights.lab.as_mut_ptr(),
-                sg.weights.ptn.as_mut_ptr(),
+                sg.node_weights.lab.as_mut_ptr(),
+                sg.node_weights.ptn.as_mut_ptr(),
                 orbits.as_mut_ptr(),
                 &mut options,
                 &mut stats,
                 &mut cg,
             );
-            copy_sg(&cg, &mut sg.g);
             SG_FREE(&mut cg);
         }
-        Ok((&sg).into())
+        Ok(sg.into())
     }
 }
 
 #[derive(Error, Debug)]
-pub enum TracesError {
+pub enum TracesError<N, E, Ix: IndexType> {
     #[error("Graph has at least one self-loop")]
-    SelfLoop,
-}
-
-unsafe fn copy_sg(from: &sparsegraph, to: &mut SparseGraph) {
-    use std::slice::from_raw_parts;
-    debug_assert_eq!(from.nv as usize, to.v.len());
-    debug_assert_eq!(from.vlen as usize, to.v.len());
-    debug_assert_eq!(from.dlen as usize, to.d.len());
-    debug_assert_eq!(from.nde as usize, to.e.len());
-    debug_assert_eq!(from.elen as usize, to.e.len());
-    let v = from_raw_parts(from.v, from.vlen as usize);
-    let d = from_raw_parts(from.d, from.dlen as usize);
-    let e = from_raw_parts(from.e, from.elen as usize);
-    to.v.copy_from_slice(v);
-    to.d.copy_from_slice(d);
-    to.e.copy_from_slice(e);
+    SelfLoop(UnGraph<N, E, Ix>),
 }
 
 fn has_self_loop<N, E, Ty: EdgeType, Ix: IndexType>(
     g: &Graph<N, E, Ty, Ix>,
 ) -> bool {
     g.edge_references().any(|e| e.source() == e.target())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::super::cmp::IsIdentical;
+    use itertools::izip;
+    use testing::GraphIter;
+    use petgraph::{
+        Directed, Undirected,
+        algo::isomorphism::is_isomorphic,
+        graph::{Graph, IndexType},
+        EdgeType,
+    };
+    use rand::{
+        distributions::Uniform,
+        prelude::*
+    };
+
+    use rand_xoshiro::Xoshiro256Plus;
+
+    use log::debug;
+
+    fn log_init() {
+        let _ = env_logger::builder().is_test(true).try_init();
+    }
+
+    fn randomize_labels<N, E, Ty, Ix>(
+        g: Graph<N, E, Ty, Ix>,
+        rng: &mut impl Rng,
+    ) -> Graph<N, E, Ty, Ix>
+    where
+        Ty: EdgeType,
+        Ix: IndexType,
+    {
+        use petgraph::visit::NodeIndexable;
+        let mut res = Graph::with_capacity(
+            g.node_count(),
+            g.edge_count()
+        );
+        let edges = Vec::from_iter(
+            g.edge_references().map(
+                |e| {
+                    let source = g.to_index(e.source());
+                    let target = g.to_index(e.target());
+                    (source, target)
+                })
+        );
+        let (nodes, edge_wts) = g.into_nodes_edges();
+        let mut nodes = Vec::from_iter(
+            nodes.into_iter().map(|n| n.weight).enumerate()
+        );
+        nodes.shuffle(rng);
+        let mut relabel = Vec::new();
+        for (n, w) in nodes {
+            res.add_node(w);
+            relabel.push(n);
+        }
+        let edges = izip!(edges, edge_wts).map(
+            |((source, target), w)| (relabel[source], relabel[target], w.weight)
+        );
+        for (source, target, w) in edges {
+           res.add_edge(res.from_index(source), res.from_index(target), w);
+        }
+        res
+    }
+
+    #[test]
+    fn random_canon_undirected() {
+        log_init();
+
+        let mut rng = Xoshiro256Plus::seed_from_u64(0);
+        let mut graphs = GraphIter::<Undirected>::default();
+        graphs.edge_wt_distr = Uniform::from(0..=0);
+
+        for g in graphs.take(1000) {
+            debug!("Initial graph: {g:#?}");
+            let gg = randomize_labels(g.clone(), &mut rng);
+            debug!("Randomised graph: {gg:#?}");
+            assert!(is_isomorphic(&g, &gg));
+            let g = g.into_canon();
+            debug!("Canonical graph (from initial): {g:#?}");
+            assert!(is_isomorphic(&g, &gg));
+            let gg = gg.into_canon();
+            debug!("Canonical graph (from randomised): {gg:#?}");
+            assert!(is_isomorphic(&g, &gg));
+            assert!(g.is_identical(&gg));
+        }
+    }
+
+    #[test]
+    fn random_canon_directed() {
+        log_init();
+
+        let mut rng = Xoshiro256Plus::seed_from_u64(0);
+        let mut graphs = GraphIter::<Directed>::default();
+        graphs.edge_wt_distr = Uniform::from(0..=0);
+
+        for g in graphs.take(700) {
+            debug!("Initial graph: {g:#?}");
+            let gg = randomize_labels(g.clone(), &mut rng);
+            debug!("Randomised graph: {gg:#?}");
+            assert!(is_isomorphic(&g, &gg));
+            let g = g.into_canon();
+            debug!("Canonical graph (from initial): {g:#?}");
+            assert!(is_isomorphic(&g, &gg));
+            let gg = gg.into_canon();
+            debug!("Canonical graph (from randomised): {gg:#?}");
+            assert!(is_isomorphic(&g, &gg));
+            assert!(g.is_identical(&gg));
+        }
+    }
+
 }

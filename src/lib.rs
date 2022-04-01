@@ -20,25 +20,15 @@
 //!
 //! ```rust
 //! use petgraph::graph::UnGraph;
-//! use nauty_pet::ToCanon;
+//! use nauty_pet::prelude::*;
 //!
 //! // Two different vertex labellings for the tree graph with two edges
 //! let g1 = UnGraph::<(), ()>::from_edges([(0, 1), (1, 2)]);
 //! let g2 = UnGraph::<(), ()>::from_edges([(0, 1), (0, 2)]);
 //!
-//! let c1 = g1.to_canon();
-//! let c2 = g2.to_canon();
-//! // c1 and c2 now have the same edges, up to permutation
-//! #
-//! # let mut edges = [Vec::new(), Vec::new()];
-//! # for (e, c) in edges.iter_mut().zip([c1, c2].into_iter()) {
-//! #    let (_, ee) = c.into_nodes_edges();
-//! #    *e = Vec::from_iter(
-//! #       ee.into_iter().map(|e| (e.source(), e.target()))
-//! #    );
-//! #    e.sort_unstable();
-//! # }
-//! # assert_eq!(edges[0], edges[1]);
+//! let c1 = g1.into_canon();
+//! let c2 = g2.into_canon();
+//! assert!(c1.is_identical(&c2))
 //! ```
 //!
 //! # Caveats
@@ -47,13 +37,13 @@
 //! - Only undirected graphs without self-loops have been tested so far.
 //!
 mod canon;
+mod cmp;
 mod sparse_graph;
-
-pub use canon::{ToCanon, ToCanonNautySparse, ToCanonTraces, TracesError};
+pub mod prelude;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::prelude::*;
     use petgraph::{
         graph::{Graph, IndexType, UnGraph},
         prelude::EdgeIndex,
@@ -68,14 +58,6 @@ mod tests {
     ) -> EdgeIndex<Ix> {
         use petgraph::visit::NodeIndexable;
         g.add_edge(g.from_index(v1), g.from_index(v2), wt)
-    }
-
-    fn minmax<T: Ord>(t1: T, t2: T) -> (T, T) {
-        if t1 <= t2 {
-            (t1, t2)
-        } else {
-            (t2, t1)
-        }
     }
 
     #[test]
@@ -113,20 +95,10 @@ mod tests {
 
             /* Create canonical graphs */
 
-            let cg1 = g1.to_canon();
-            let cg2 = g2.to_canon();
+            let cg1 = g1.into_canon();
+            let cg2 = g2.into_canon();
 
-            let (_, e1) = cg1.into_nodes_edges();
-            let mut e1 = Vec::from_iter(
-                e1.into_iter().map(|e| minmax(e.source(), e.target())),
-            );
-            e1.sort_unstable();
-            let (_, e2) = cg2.into_nodes_edges();
-            let mut e2 = Vec::from_iter(
-                e2.into_iter().map(|e| minmax(e.source(), e.target())),
-            );
-            e2.sort_unstable();
-            assert_eq!(e1, e2);
+            assert!(cg1.is_identical(&cg2));
         }
     }
 }
