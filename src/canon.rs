@@ -3,8 +3,8 @@ use crate::sparse_graph::SparseGraph;
 use std::cmp::Ord;
 
 use nauty_Traces_sys::{
-    optionblk, sparsegraph, sparsenauty, statsblk, Traces,
-    TracesOptions, TracesStats, FALSE, SG_FREE, TRUE,
+    optionblk, sparsegraph, sparsenauty, statsblk, Traces, TracesOptions,
+    TracesStats, FALSE, SG_FREE, TRUE,
 };
 use petgraph::{
     graph::{DiGraph, Graph, IndexType, UnGraph},
@@ -36,7 +36,8 @@ pub trait TryIntoCanonTraces {
     type Error;
 
     fn try_into_canon_traces(self) -> Result<Self, Self::Error>
-    where Self: Sized;
+    where
+        Self: Sized;
 }
 
 impl<N, E, Ix: IndexType> IntoCanon for UnGraph<N, E, Ix>
@@ -144,20 +145,16 @@ fn has_self_loop<N, E, Ty: EdgeType, Ix: IndexType>(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::cmp::IsIdentical;
+    use super::*;
     use itertools::izip;
-    use testing::GraphIter;
     use petgraph::{
-        Directed, Undirected,
         algo::isomorphism::is_isomorphic,
         graph::{Graph, IndexType},
-        EdgeType,
+        Directed, EdgeType, Undirected,
     };
-    use rand::{
-        distributions::Uniform,
-        prelude::*
-    };
+    use rand::{distributions::Uniform, prelude::*};
+    use testing::GraphIter;
 
     use rand_xoshiro::Xoshiro256Plus;
 
@@ -176,33 +173,26 @@ mod tests {
         Ix: IndexType,
     {
         use petgraph::visit::NodeIndexable;
-        let mut res = Graph::with_capacity(
-            g.node_count(),
-            g.edge_count()
-        );
-        let edges = Vec::from_iter(
-            g.edge_references().map(
-                |e| {
-                    let source = g.to_index(e.source());
-                    let target = g.to_index(e.target());
-                    (source, target)
-                })
-        );
+        let mut res = Graph::with_capacity(g.node_count(), g.edge_count());
+        let edges = Vec::from_iter(g.edge_references().map(|e| {
+            let source = g.to_index(e.source());
+            let target = g.to_index(e.target());
+            (source, target)
+        }));
         let (nodes, edge_wts) = g.into_nodes_edges();
-        let mut nodes = Vec::from_iter(
-            nodes.into_iter().map(|n| n.weight).enumerate()
-        );
+        let mut nodes =
+            Vec::from_iter(nodes.into_iter().map(|n| n.weight).enumerate());
         nodes.shuffle(rng);
         let mut relabel = Vec::new();
         for (n, w) in nodes {
             res.add_node(w);
             relabel.push(n);
         }
-        let edges = izip!(edges, edge_wts).map(
-            |((source, target), w)| (relabel[source], relabel[target], w.weight)
-        );
+        let edges = izip!(edges, edge_wts).map(|((source, target), w)| {
+            (relabel[source], relabel[target], w.weight)
+        });
         for (source, target, w) in edges {
-           res.add_edge(res.from_index(source), res.from_index(target), w);
+            res.add_edge(res.from_index(source), res.from_index(target), w);
         }
         res
     }
@@ -252,5 +242,4 @@ mod tests {
             assert!(g.is_identical(&gg));
         }
     }
-
 }

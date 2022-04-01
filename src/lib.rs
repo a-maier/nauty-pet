@@ -38,15 +38,11 @@
 //!
 mod canon;
 mod cmp;
-mod sparse_graph;
 pub mod prelude;
+mod sparse_graph;
 
+pub use canon::{IntoCanon, IntoCanonNautySparse, TryIntoCanonTraces};
 pub use cmp::IsIdentical;
-pub use canon::{
-    IntoCanon,
-    IntoCanonNautySparse,
-    TryIntoCanonTraces,
-};
 
 #[cfg(test)]
 mod tests {
