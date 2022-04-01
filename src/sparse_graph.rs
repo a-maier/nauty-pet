@@ -1,6 +1,5 @@
 use std::convert::From;
 use std::cmp::{Ord, Ordering};
-use std::fmt::Debug;
 use std::os::raw::c_int;
 use std::marker::PhantomData;
 
@@ -33,7 +32,6 @@ where
     Ty: EdgeType,
     Ix: IndexType,
     N: Ord,
-    N: Debug, E: Debug, Ix: Debug,
 {
     fn from(g: Graph<N, E, Ty, Ix>) -> Self {
         use petgraph::visit::NodeIndexable;
@@ -119,7 +117,6 @@ where
     Ty: EdgeType,
     Ix: IndexType,
     E: Ord,
-N: Debug, E: Debug, Ix: Debug,
 {
     fn from(mut g: SparseGraph<N, E, Ty>) -> Self {
         debug_assert_eq!(g.g.v.len(), g.g.d.len());
@@ -195,6 +192,9 @@ N: Debug, E: Debug, Ix: Debug,
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::fmt::Debug;
+
     use testing::GraphIter;
     use petgraph::{
         Directed, Undirected,
@@ -212,8 +212,8 @@ mod tests {
         g: Graph<N, E, Ty, Ix>
     )
     where
-        N: Debug + Clone + Ord,
-        E: Debug + Clone + Ord,
+        N: Clone + Debug + Ord,
+        E: Clone + Debug + Ord,
         Ty: Debug + EdgeType,
         Ix: IndexType
     {

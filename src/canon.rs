@@ -2,8 +2,6 @@ use crate::sparse_graph::SparseGraph;
 
 use std::cmp::Ord;
 
-use std::fmt::Debug;
-
 use nauty_Traces_sys::{
     optionblk, sparsegraph, sparsenauty, statsblk, Traces,
     TracesOptions, TracesStats, FALSE, SG_FREE, TRUE,
@@ -45,7 +43,6 @@ impl<N, E, Ix: IndexType> IntoCanon for UnGraph<N, E, Ix>
 where
     N: Ord,
     E: Ord,
-N: Debug, E: Debug, Ix: Debug,
 {
     fn into_canon(self) -> Self {
         match self.try_into_canon_traces() {
@@ -59,7 +56,6 @@ impl<N, E, Ix: IndexType> IntoCanon for DiGraph<N, E, Ix>
 where
     N: Ord,
     E: Ord,
-N: Debug, E: Debug, Ix: Debug,
 {
     fn into_canon(self) -> Self {
         self.into_canon_nauty_sparse()
@@ -71,7 +67,6 @@ where
     N: Ord,
     E: Ord,
     Ty: EdgeType,
-N: Debug, E: Debug, Ix: Debug,
 {
     fn into_canon_nauty_sparse(self) -> Self {
         let mut options = optionblk::default_sparse();
@@ -102,7 +97,6 @@ impl<N, E, Ix: IndexType> TryIntoCanonTraces for UnGraph<N, E, Ix>
 where
     N: Ord,
     E: Ord,
-N: Debug, E: Debug, Ix: Debug,
 {
     type Error = TracesError<N, E, Ix>;
 
