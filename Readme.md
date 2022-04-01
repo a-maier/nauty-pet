@@ -15,7 +15,7 @@ installed first and _linked to the same C library as this crate_.
 Afterwards, add this to your Cargo.toml:
 ```toml
 [dependencies]
-nauty-pet = "0.1"
+nauty-pet = "0.2"
 ```
 
 ## Example
