@@ -22,22 +22,21 @@ nauty-pet = "0.1"
 
 ```rust
 use petgraph::graph::UnGraph;
-use nauty_pet::ToCanon;
+use nauty_pet::prelude::*;
 
 // Two different vertex labellings for the tree graph with two edges
 let g1 = UnGraph::<(), ()>::from_edges([(0, 1), (1, 2)]);
 let g2 = UnGraph::<(), ()>::from_edges([(0, 1), (0, 2)]);
 
-let c1 = g1.to_canon();
-let c2 = g2.to_canon();
-// c1 and c2 now have the same edges, up to permutation
-#
+let c1 = g1.into_canon();
+let c2 = g2.into_canon();
+assert!(c1.is_identical(&c2))
 ```
 
 ## Caveats
 
-- Edge weights are ignored and discarded.
-- Only undirected graphs without self-loops have been tested so far.
+Edge weights are ignored. In general, no unique canonical form is
+found for weighted graphs.
 
 
 License: Apache-2.0

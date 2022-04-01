@@ -33,8 +33,8 @@
 //!
 //! # Caveats
 //!
-//! - Edge weights are ignored and discarded.
-//! - Only undirected graphs without self-loops have been tested so far.
+//! Edge weights are ignored. In general, no unique canonical form is
+//! found for weighted graphs.
 //!
 mod canon;
 mod cmp;
