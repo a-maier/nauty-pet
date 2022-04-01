@@ -41,6 +41,13 @@ mod cmp;
 mod sparse_graph;
 pub mod prelude;
 
+pub use cmp::IsIdentical;
+pub use canon::{
+    IntoCanon,
+    IntoCanonNautySparse,
+    TryIntoCanonTraces,
+};
+
 #[cfg(test)]
 mod tests {
     use super::prelude::*;

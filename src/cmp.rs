@@ -4,6 +4,7 @@ use petgraph::{
     Graph,
 };
 
+/// Check if two objects are identical
 pub trait IsIdentical {
     fn is_identical(&self, other: &Self) -> bool;
 }
