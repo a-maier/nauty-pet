@@ -183,10 +183,10 @@ mod tests {
         let mut nodes =
             Vec::from_iter(nodes.into_iter().map(|n| n.weight).enumerate());
         nodes.shuffle(rng);
-        let mut relabel = Vec::new();
-        for (n, w) in nodes {
+        let mut relabel = vec![0; nodes.len()];
+        for (new, (old, w)) in nodes.into_iter().enumerate() {
             res.add_node(w);
-            relabel.push(n);
+            relabel[old] = new;
         }
         let edges = izip!(edges, edge_wts).map(|((source, target), w)| {
             (relabel[source], relabel[target], w.weight)

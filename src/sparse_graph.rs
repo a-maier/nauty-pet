@@ -146,9 +146,15 @@ where
         };
         let mut res = Graph::with_capacity(g.g.v.len(), nedges);
 
-        // nodes: relabel according to `lab`
+        // find relabelling from `lab`
+        let mut relabel = vec![0; g.node_weights.lab.len()];
+        for (new, old) in g.node_weights.lab.into_iter().enumerate() {
+            relabel[old as usize] = new;
+        }
+
+        // nodes
         let mut node_weights = Vec::from_iter(izip!(
-            g.node_weights.lab.iter().copied(),
+            relabel.iter().copied(),
             g.node_weights.weights
         ));
         node_weights.sort_unstable_by_key(|e| e.0);
@@ -187,9 +193,9 @@ where
                     .pop()
                     .unwrap();
 
-                // relabel according to `lab`
-                let mut source = g.node_weights.lab[source as usize];
-                let mut target = g.node_weights.lab[target as usize];
+                // relabel
+                let mut source = relabel[source as usize];
+                let mut target = relabel[target as usize];
                 if !is_directed && source > target {
                     std::mem::swap(&mut source, &mut target);
                 }
