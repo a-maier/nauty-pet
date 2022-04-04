@@ -164,6 +164,28 @@ mod tests {
         let _ = env_logger::builder().is_test(true).try_init();
     }
 
+    #[test]
+    fn triangle() {
+        log_init();
+
+        use petgraph::visit::NodeIndexable;
+        let mut g1 = UnGraph::<u8, ()>::from_edges([
+            (0, 0), (1, 1), (0, 1), (0, 2), (1, 2), (1, 2),
+        ]);
+        *g1.node_weight_mut(g1.from_index(0)).unwrap() = 2;
+        *g1.node_weight_mut(g1.from_index(1)).unwrap() = 2;
+        let g1 = g1.into_canon();
+
+        let mut g2 = UnGraph::<u8, ()>::from_edges([
+            (0, 0), (1, 1), (0, 1), (0, 2), (0, 2), (1, 2),
+        ]);
+        *g2.node_weight_mut(g2.from_index(0)).unwrap() = 2;
+        *g2.node_weight_mut(g2.from_index(1)).unwrap() = 2;
+        let g2 = g2.into_canon();
+
+        assert!(g1.is_identical(&g2));
+    }
+
     fn randomize_labels<N, E, Ty, Ix>(
         g: Graph<N, E, Ty, Ix>,
         rng: &mut impl Rng,
