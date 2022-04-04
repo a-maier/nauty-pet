@@ -28,7 +28,7 @@ impl<Ty: EdgeType> Default for GraphIter<Ty> {
             node_distr: Uniform::from(1..10),
             node_wt_distr: Uniform::from(0..3),
             edge_wt_distr: Uniform::from(0..3),
-            edge_distr: Normal::new(1.0, 1.0).unwrap(),
+            edge_distr: Normal::new(0.5, 1.0).unwrap(),
             edge_type: PhantomData
         }
     }
@@ -47,10 +47,8 @@ impl<Ty: EdgeType> Iterator for GraphIter<Ty> {
         for i in 0..nnodes {
             let start = if Ty::is_directed() { 0 } else { i };
             for j in start..nnodes {
-                let nedges = (0..)
-                    .map(|_| self.edge_distr.sample(&mut rng))
-                    .find(|&n| n >= 0f64)
-                    .unwrap()
+                let nedges = self.edge_distr.sample(&mut rng)
+                    .clamp(0.0, 1.0)
                     .round() as u64;
                 for _ in 0..nedges {
                     use petgraph::visit::NodeIndexable;
