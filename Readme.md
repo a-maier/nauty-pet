@@ -35,8 +35,8 @@ assert!(c1.is_identical(&c2))
 
 ## Caveats
 
-Edge weights are ignored. In general, no unique canonical form is
-found for weighted graphs.
+No unique canonical form is found for graphs with edge weights or
+multiple edges between any pair of vertices.
 
 
 License: Apache-2.0

@@ -33,8 +33,8 @@
 //!
 //! # Caveats
 //!
-//! Edge weights are ignored. In general, no unique canonical form is
-//! found for weighted graphs.
+//! No unique canonical form is found for graphs with edge weights or
+//! multiple edges between any pair of vertices.
 //!
 mod canon;
 mod cmp;
