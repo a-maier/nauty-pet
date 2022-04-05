@@ -70,9 +70,7 @@ where
             edge_weights.entry(edge).or_default().push(wt)
         }
         let edges = Vec::from_iter(
-            edge_weights.iter().map(
-                |((s, t), w)| (*s, *t, w.len())
-            )
+            edge_weights.iter().map(|((s, t), w)| (*s, *t, w.len())),
         );
         let g = sg_from(node_weights.len(), &edges, is_directed);
         debug_assert!(g.v.len() >= node_weights.len());
@@ -108,9 +106,7 @@ fn sg_from(
     edges: &[(c_int, c_int, usize)],
     is_directed: bool,
 ) -> NautySparse {
-    let num_edges = edges.iter().map(
-        |(_s, _t, n)| *n
-    ).sum();
+    let num_edges = edges.iter().map(|(_s, _t, n)| *n).sum();
     let num_aux_nodes = num_edges - edges.len();
     let mut sg = NautySparse::new(
         num_nodes + num_aux_nodes,
@@ -134,7 +130,7 @@ fn sg_from(
             continue;
         }
         // introduce auxiliary nodes for multiple edges
-        let aux_nodes = cur_aux_node .. cur_aux_node + num - 1;
+        let aux_nodes = cur_aux_node..cur_aux_node + num - 1;
         let chain = once(*source as usize)
             .chain(aux_nodes)
             .chain(once(*target as usize));
@@ -176,7 +172,8 @@ where
             debug_assert_eq!(g.g.e.len() % 2, 0);
             g.g.e.len() / 2
         };
-        let mut res = Graph::with_capacity(g.node_weights.weights.len(), nedges);
+        let mut res =
+            Graph::with_capacity(g.node_weights.weights.len(), nedges);
 
         // find relabelling from `lab`
         let mut relabel = vec![0; g.node_weights.lab.len()];
@@ -228,8 +225,11 @@ where
                     debug_assert_eq!(d, if is_directed { 1 } else { 2 });
                     let start = g.g.v[target as usize] as usize;
                     let end = start + d as usize;
-                    let next = g.g.e[start..end].iter().copied()
-                        .find(|&t| t != previous).unwrap();
+                    let next = g.g.e[start..end]
+                        .iter()
+                        .copied()
+                        .find(|&t| t != previous)
+                        .unwrap();
                     previous = target;
                     target = next;
                 }

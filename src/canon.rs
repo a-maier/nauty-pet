@@ -170,14 +170,24 @@ mod tests {
 
         use petgraph::visit::NodeIndexable;
         let mut g1 = UnGraph::<u8, ()>::from_edges([
-            (0, 0), (1, 1), (0, 1), (0, 2), (1, 2), (1, 2),
+            (0, 0),
+            (1, 1),
+            (0, 1),
+            (0, 2),
+            (1, 2),
+            (1, 2),
         ]);
         *g1.node_weight_mut(g1.from_index(0)).unwrap() = 2;
         *g1.node_weight_mut(g1.from_index(1)).unwrap() = 2;
         let g1 = g1.into_canon();
 
         let mut g2 = UnGraph::<u8, ()>::from_edges([
-            (0, 0), (1, 1), (0, 1), (0, 2), (0, 2), (1, 2),
+            (0, 0),
+            (1, 1),
+            (0, 1),
+            (0, 2),
+            (0, 2),
+            (1, 2),
         ]);
         *g2.node_weight_mut(g2.from_index(0)).unwrap() = 2;
         *g2.node_weight_mut(g2.from_index(1)).unwrap() = 2;
