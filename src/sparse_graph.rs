@@ -7,7 +7,7 @@ use ahash::AHashMap;
 use itertools::{izip, Itertools};
 use nauty_Traces_sys::{size_t, SparseGraph as NautySparse};
 use petgraph::{
-    graph::{Graph, IndexType},
+    graph::{Graph, IndexType, Node},
     visit::EdgeRef,
     EdgeType,
 };
@@ -27,6 +27,33 @@ pub(crate) struct Weights<N> {
     pub(crate) weights: Vec<N>,
 }
 
+fn relabel_to_contiguous_node_weights<N: Ord, Ix: IndexType>(
+    node_weights: impl IntoIterator<Item = Node<N, Ix>>,
+    edges: &mut [(c_int, c_int)],
+    is_directed: bool,
+) -> Vec<N> {
+    let mut node_weights = Vec::from_iter(
+        node_weights
+            .into_iter()
+            .enumerate()
+            .map(|(idx, n)| (n.weight, idx)),
+    );
+    // TODO: use sort_by_key, but that has lifetime problems?
+    node_weights.sort_unstable_by(|i, j| i.0.cmp(&j.0));
+    let mut renumber = vec![0; node_weights.len()];
+    for (new_idx, (_, old_idx)) in node_weights.iter().enumerate() {
+        renumber[*old_idx] = new_idx as c_int;
+    }
+    for edge in edges {
+        edge.0 = renumber[edge.0 as usize];
+        edge.1 = renumber[edge.1 as usize];
+        if !is_directed && edge.0 > edge.1 {
+            std::mem::swap(&mut edge.0, &mut edge.1);
+        }
+    }
+    node_weights.into_iter().map(|(wt, _old_idx)| wt).collect()
+}
+
 impl<N, E, Ty, Ix> From<Graph<N, E, Ty, Ix>> for SparseGraph<N, E, Ty>
 where
     Ty: EdgeType,
@@ -44,27 +71,13 @@ where
         }));
         let (nodes, e) = g.into_nodes_edges();
         let e_weights = Vec::from_iter(e.into_iter().map(|e| e.weight));
-        let mut node_weights = Vec::from_iter(
-            nodes
-                .into_iter()
-                .enumerate()
-                .map(|(idx, n)| (n.weight, idx)),
+
+        let node_weights = relabel_to_contiguous_node_weights(
+            nodes,
+            &mut edges,
+            is_directed
         );
-        // TODO: use sort_by_key, but that has lifetime problems?
-        node_weights.sort_unstable_by(|i, j| i.0.cmp(&j.0));
-        let mut renumber = vec![0; node_weights.len()];
-        for (new_idx, (_, old_idx)) in node_weights.iter().enumerate() {
-            renumber[*old_idx] = new_idx as c_int;
-        }
-        let node_weights =
-            Vec::from_iter(node_weights.into_iter().map(|(wt, _old_idx)| wt));
-        for edge in &mut edges {
-            edge.0 = renumber[edge.0 as usize];
-            edge.1 = renumber[edge.1 as usize];
-            if !is_directed && edge.0 > edge.1 {
-                std::mem::swap(&mut edge.0, &mut edge.1);
-            }
-        }
+
         let mut edge_weights: AHashMap<_, Vec<E>> = AHashMap::new();
         for (edge, wt) in izip!(edges, e_weights) {
             edge_weights.entry(edge).or_default().push(wt)
