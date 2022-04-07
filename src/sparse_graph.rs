@@ -15,13 +15,13 @@ use petgraph::{
 #[derive(Debug, Default, Clone)]
 pub(crate) struct SparseGraph<N, E, D> {
     pub(crate) g: NautySparse,
-    pub(crate) node_weights: Weights<N>,
-    edge_weights: AHashMap<(c_int, c_int), Vec<E>>,
+    pub(crate) nodes: Nodes<N>,
+    edges: AHashMap<(c_int, c_int), Vec<E>>,
     dir: PhantomData<D>,
 }
 
 #[derive(Debug, Default, Clone, Hash)]
-pub(crate) struct Weights<N> {
+pub(crate) struct Nodes<N> {
     pub(crate) lab: Vec<c_int>,
     pub(crate) ptn: Vec<c_int>,
     pub(crate) weights: Vec<N>,
@@ -100,15 +100,15 @@ where
             *last = 0;
         }
         let lab = (0..g.v.len() as i32).collect();
-        let node_weights = Weights {
+        let nodes = Nodes {
             weights: node_weights,
             lab,
             ptn,
         };
         Self {
             g,
-            edge_weights,
-            node_weights,
+            edges: edge_weights,
+            nodes,
             dir: PhantomData,
         }
     }
@@ -175,9 +175,9 @@ where
 {
     fn from(mut g: SparseGraph<N, E, Ty>) -> Self {
         debug_assert_eq!(g.g.v.len(), g.g.d.len());
-        debug_assert_eq!(g.g.v.len(), g.node_weights.ptn.len());
-        debug_assert_eq!(g.g.v.len(), g.node_weights.lab.len());
-        debug_assert!(g.g.v.len() >= g.node_weights.weights.len());
+        debug_assert_eq!(g.g.v.len(), g.nodes.ptn.len());
+        debug_assert_eq!(g.g.v.len(), g.nodes.lab.len());
+        debug_assert!(g.g.v.len() >= g.nodes.weights.len());
         let is_directed = Ty::is_directed();
         let nedges = if is_directed {
             g.g.e.len()
@@ -185,19 +185,18 @@ where
             debug_assert_eq!(g.g.e.len() % 2, 0);
             g.g.e.len() / 2
         };
-        let mut res =
-            Graph::with_capacity(g.node_weights.weights.len(), nedges);
+        let mut res = Graph::with_capacity(g.nodes.weights.len(), nedges);
 
         // find relabelling from `lab`
-        let mut relabel = vec![0; g.node_weights.lab.len()];
-        for (new, old) in g.node_weights.lab.into_iter().enumerate() {
+        let mut relabel = vec![0; g.nodes.lab.len()];
+        for (new, old) in g.nodes.lab.into_iter().enumerate() {
             relabel[old as usize] = new;
         }
 
         // nodes
         let mut node_weights = Vec::from_iter(izip!(
             relabel.iter().copied(),
-            g.node_weights.weights
+            g.nodes.weights
         ));
         node_weights.sort_unstable_by_key(|e| e.0);
         for (n, i) in node_weights.iter().map(|(i, _w)| i).enumerate() {
@@ -257,7 +256,7 @@ where
 
                 for _ in 0..num_edges {
                     let w = g
-                        .edge_weights
+                        .edges
                         .get_mut(&(source, target))
                         .unwrap()
                         .pop()

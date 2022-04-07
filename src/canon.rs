@@ -81,8 +81,8 @@ where
         unsafe {
             sparsenauty(
                 &mut (&mut sg.g).into(),
-                sg.node_weights.lab.as_mut_ptr(),
-                sg.node_weights.ptn.as_mut_ptr(),
+                sg.nodes.lab.as_mut_ptr(),
+                sg.nodes.ptn.as_mut_ptr(),
                 orbits.as_mut_ptr(),
                 &mut options,
                 &mut stats,
@@ -118,8 +118,8 @@ where
         unsafe {
             Traces(
                 &mut (&mut sg.g).into(),
-                sg.node_weights.lab.as_mut_ptr(),
-                sg.node_weights.ptn.as_mut_ptr(),
+                sg.nodes.lab.as_mut_ptr(),
+                sg.nodes.ptn.as_mut_ptr(),
                 orbits.as_mut_ptr(),
                 &mut options,
                 &mut stats,
