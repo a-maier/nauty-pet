@@ -1,6 +1,7 @@
 use crate::sparse_graph::SparseGraph;
 
 use std::cmp::Ord;
+use std::hash::Hash;
 
 use nauty_Traces_sys::{
     optionblk, sparsegraph, sparsenauty, statsblk, Traces, TracesOptions,
@@ -43,7 +44,7 @@ pub trait TryIntoCanonTraces {
 impl<N, E, Ix: IndexType> IntoCanon for UnGraph<N, E, Ix>
 where
     N: Ord,
-    E: Ord,
+    E: Hash + Ord,
 {
     fn into_canon(self) -> Self {
         match self.try_into_canon_traces() {
@@ -56,7 +57,7 @@ where
 impl<N, E, Ix: IndexType> IntoCanon for DiGraph<N, E, Ix>
 where
     N: Ord,
-    E: Ord,
+    E: Hash + Ord,
 {
     fn into_canon(self) -> Self {
         self.into_canon_nauty_sparse()
@@ -66,7 +67,7 @@ where
 impl<N, E, Ty, Ix: IndexType> IntoCanonNautySparse for Graph<N, E, Ty, Ix>
 where
     N: Ord,
-    E: Ord,
+    E: Hash + Ord,
     Ty: EdgeType,
 {
     fn into_canon_nauty_sparse(self) -> Self {
@@ -75,8 +76,8 @@ where
         options.defaultptn = FALSE;
         options.digraph = TRUE;
         let mut stats = statsblk::default();
-        let mut orbits = vec![0; self.node_count()];
         let mut sg = SparseGraph::from(self);
+        let mut orbits = vec![0; sg.g.v.len()];
         let mut cg = sparsegraph::default();
         unsafe {
             sparsenauty(
@@ -97,7 +98,7 @@ where
 impl<N, E, Ix: IndexType> TryIntoCanonTraces for UnGraph<N, E, Ix>
 where
     N: Ord,
-    E: Ord,
+    E: Hash + Ord,
 {
     type Error = TracesError<N, E, Ix>;
 
@@ -112,8 +113,8 @@ where
             ..Default::default()
         };
         let mut stats = TracesStats::default();
-        let mut orbits = vec![0; self.node_count()];
         let mut sg = SparseGraph::from(self);
+        let mut orbits = vec![0; sg.g.v.len()];
         let mut cg = sparsegraph::default();
         unsafe {
             Traces(

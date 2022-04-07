@@ -1,10 +1,11 @@
-use std::cmp::{Ord, Ordering};
+use std::cmp::Ord;
 use std::convert::From;
+use std::hash::Hash;
 use std::marker::PhantomData;
 use std::os::raw::c_int;
 
 use ahash::AHashMap;
-use itertools::{izip, Itertools};
+use itertools::izip;
 use nauty_Traces_sys::{size_t, SparseGraph as NautySparse};
 use petgraph::{
     graph::{Graph, IndexType, Node},
@@ -16,7 +17,7 @@ use petgraph::{
 pub(crate) struct SparseGraph<N, E, D> {
     pub(crate) g: NautySparse,
     pub(crate) nodes: Nodes<N>,
-    edges: AHashMap<(c_int, c_int), Vec<E>>,
+    edges: AHashMap<(usize, usize), Vec<E>>,
     dir: PhantomData<D>,
 }
 
@@ -29,7 +30,7 @@ pub(crate) struct Nodes<N> {
 
 fn relabel_to_contiguous_node_weights<N: Ord, Ix: IndexType>(
     node_weights: impl IntoIterator<Item = Node<N, Ix>>,
-    edges: &mut [(c_int, c_int)],
+    edges: &mut [(usize, usize)],
     is_directed: bool,
 ) -> Vec<N> {
     let mut node_weights = Vec::from_iter(
@@ -42,11 +43,11 @@ fn relabel_to_contiguous_node_weights<N: Ord, Ix: IndexType>(
     node_weights.sort_unstable_by(|i, j| i.0.cmp(&j.0));
     let mut renumber = vec![0; node_weights.len()];
     for (new_idx, (_, old_idx)) in node_weights.iter().enumerate() {
-        renumber[*old_idx] = new_idx as c_int;
+        renumber[*old_idx] = new_idx;
     }
     for edge in edges {
-        edge.0 = renumber[edge.0 as usize];
-        edge.1 = renumber[edge.1 as usize];
+        edge.0 = renumber[edge.0];
+        edge.1 = renumber[edge.1];
         if !is_directed && edge.0 > edge.1 {
             std::mem::swap(&mut edge.0, &mut edge.1);
         }
@@ -59,15 +60,13 @@ where
     Ty: EdgeType,
     Ix: IndexType,
     N: Ord,
+    E: Hash + Ord,
 {
     fn from(g: Graph<N, E, Ty, Ix>) -> Self {
         use petgraph::visit::NodeIndexable;
         let is_directed = g.is_directed();
         let mut edges = Vec::from_iter(g.edge_references().map(|e| {
-            (
-                g.to_index(e.source()) as c_int,
-                g.to_index(e.target()) as c_int,
-            )
+            (g.to_index(e.source()), g.to_index(e.target()))
         }));
         let (nodes, e) = g.into_nodes_edges();
         let e_weights = Vec::from_iter(e.into_iter().map(|e| e.weight));
@@ -78,26 +77,131 @@ where
             is_directed
         );
 
+        // edge weights
+        // we combine multiple edges into a single one with an
+        // effective weight given by the sorted vector of the
+        // individual weights
         let mut edge_weights: AHashMap<_, Vec<E>> = AHashMap::new();
         for (edge, wt) in izip!(edges, e_weights) {
             edge_weights.entry(edge).or_default().push(wt)
         }
-        let edges = Vec::from_iter(
-            edge_weights.iter().map(|((s, t), w)| (*s, *t, w.len())),
+        for v in edge_weights.values_mut() {
+            v.sort_unstable();
+        }
+
+        // the edge weight that appears most often is taken to be the default
+        // for all other edge weights we introduce auxiliary vertices
+        // each non-default edge weight has its own vertex type (colour)
+        let mut edge_weight_counts: AHashMap<&[E], u32> = AHashMap::new();
+        for v in edge_weights.values() {
+            *edge_weight_counts.entry(v).or_default() += 1;
+        }
+        let mut edge_weight_counts = Vec::from_iter(edge_weight_counts);
+        edge_weight_counts.sort_unstable();
+        let max_pos = edge_weight_counts.iter().enumerate()
+            .max_by_key(|(_n, (_k, v))| v)
+            .map(|(n, _)| n);
+        if let Some(max_pos) = max_pos {
+            edge_weight_counts.remove(max_pos);
+        }
+
+        let aux_vertex_type: AHashMap<_, _> = edge_weight_counts.into_iter()
+            .enumerate()
+            .map(|(n, (k, _))| (k, n))
+            .collect();
+
+        // We introduce one auxiliar vertex for each edge with
+        // non-default weight. To eliminate self-loops, we instead
+        // introduce _two_ additional vertices, even if the original
+        // edge had the default weight
+        let mut num_aux = vec![0; aux_vertex_type.len() + 1];
+        for ((source, target), w) in &edge_weights {
+            if let Some(&aux_type) = aux_vertex_type.get(w.as_slice()) {
+                if source == target {
+                    num_aux[aux_type] += 2;
+                } else {
+                    num_aux[aux_type] += 1;
+                }
+            } else if source == target {
+                *num_aux.last_mut().unwrap() += 2;
+            }
+        }
+
+        let total_num_aux: usize = num_aux.iter().sum();
+        let num_nauty_vertices = node_weights.len() + total_num_aux;
+        let mut num_nauty_edges = edge_weights.len() + total_num_aux;
+        if !is_directed {
+            num_nauty_edges *= 2
+        }
+
+        let mut aux_vx_idx = Vec::from_iter(
+            num_aux.iter().scan(
+                node_weights.len(),
+                |partial_sum, n| {
+                    let idx = *partial_sum;
+                    *partial_sum += n;
+                    Some(idx)
+                })
         );
-        let g = sg_from(node_weights.len(), &edges, is_directed);
+        let mut adj = vec![vec![]; num_nauty_vertices];
+        fn add_edge(
+            adj: &mut[Vec<c_int>],
+            source: usize,
+            target: usize,
+            is_directed: bool,
+        ) {
+            adj[source].push(target as c_int);
+            if !is_directed {
+                adj[target].push(source as c_int);
+            }
+        }
+
+        for (edge, wt) in &edge_weights {
+            let (source, target) = *edge;
+            if let Some(&aux_vx_type) = aux_vertex_type.get(wt.as_slice()) {
+                // non-default weight, introduce an extra vertex
+                add_edge(&mut adj, source, aux_vx_idx[aux_vx_type], is_directed);
+                if source == target {
+                    // self-loop, introduce one more vertex
+                    let start = aux_vx_idx[aux_vx_type];
+                    add_edge(&mut adj, start, start + 1, is_directed);
+                    aux_vx_idx[aux_vx_type] += 1;
+                }
+                add_edge(&mut adj, aux_vx_idx[aux_vx_type], target, is_directed);
+                aux_vx_idx[aux_vx_type] += 1;
+            } else if source == target {
+                // self-loop with default weight, add two auxiliary vertices
+                let vx_idx = aux_vx_idx.last_mut().unwrap();
+                add_edge(&mut adj, source, *vx_idx, is_directed);
+                add_edge(&mut adj, *vx_idx, *vx_idx + 1, is_directed);
+                add_edge(&mut adj, *vx_idx + 1, target, is_directed);
+                *vx_idx += 2;
+            } else {
+                add_edge(&mut adj, source, target, is_directed);
+            }
+        }
+
+        let mut g = NautySparse::new(num_nauty_vertices, num_nauty_edges);
+        let mut vpos = 0;
+        for (adj, d, v) in izip!(adj, &mut g.d, &mut g.v) {
+            *d = adj.len() as c_int;
+            *v = vpos;
+            let start = vpos as usize;
+            let end = start + *d as usize;
+            g.e[start..end].copy_from_slice(&adj);
+            vpos += *d as size_t
+        }
         debug_assert!(g.v.len() >= node_weights.len());
+
         let mut ptn = vec![1; g.v.len()];
         for (ptn, wts) in izip!(&mut ptn, node_weights.windows(2)) {
             if wts[1] > wts[0] {
                 *ptn = 0;
             }
         }
-        if !node_weights.is_empty() {
-            ptn[node_weights.len() - 1] = 0;
-        }
-        if let Some(last) = ptn.last_mut() {
-            *last = 0;
+        ptn[node_weights.len() - 1] = 0;
+        for i in aux_vx_idx {
+            ptn[i - 1] = 0;
         }
         let lab = (0..g.v.len() as i32).collect();
         let nodes = Nodes {
@@ -112,59 +216,6 @@ where
             dir: PhantomData,
         }
     }
-}
-
-fn sg_from(
-    num_nodes: usize,
-    edges: &[(c_int, c_int, usize)],
-    is_directed: bool,
-) -> NautySparse {
-    let num_edges = edges.iter().map(|(_s, _t, n)| *n).sum();
-    let num_aux_nodes = num_edges - edges.len();
-    let mut sg = NautySparse::new(
-        num_nodes + num_aux_nodes,
-        if is_directed {
-            num_edges
-        } else {
-            2 * num_edges
-        },
-    );
-    let mut adj = vec![vec![]; num_nodes + num_aux_nodes];
-    let mut cur_aux_node = num_nodes;
-    for (source, target, num) in edges {
-        use std::iter::once;
-        if source == target {
-            for _ in 0..*num {
-                adj[*source as usize].push(*target);
-                if !is_directed {
-                    adj[*target as usize].push(*source);
-                }
-            }
-            continue;
-        }
-        // introduce auxiliary nodes for multiple edges
-        let aux_nodes = cur_aux_node..cur_aux_node + num - 1;
-        let chain = once(*source as usize)
-            .chain(aux_nodes)
-            .chain(once(*target as usize));
-        for (source, target) in chain.tuple_windows() {
-            adj[source].push(target as c_int);
-            if !is_directed {
-                adj[target].push(source as c_int);
-            }
-        }
-        cur_aux_node += num - 1;
-    }
-    let mut vpos = 0;
-    for (adj, d, v) in izip!(adj, &mut sg.d, &mut sg.v) {
-        *d = adj.len() as c_int;
-        *v = vpos;
-        let start = vpos as usize;
-        let end = start + *d as usize;
-        sg.e[start..end].copy_from_slice(&adj);
-        vpos += *d as size_t
-    }
-    sg
 }
 
 impl<N, E, Ty, Ix> From<SparseGraph<N, E, Ty>> for Graph<N, E, Ty, Ix>
@@ -213,26 +264,15 @@ where
             let source = source as c_int;
             let start = adj_pos as usize;
             let end = start + degree as usize;
-            let mut odd_self_loop = false;
             for mut target in g.g.e[start..end].iter().copied() {
-                if !is_directed {
-                    match source.cmp(&target) {
-                        Ordering::Greater => continue,
-                        Ordering::Less => {}
-                        Ordering::Equal => {
-                            // ignore exactly half of the self-loops
-                            odd_self_loop = !odd_self_loop;
-                            if odd_self_loop {
-                                continue;
-                            };
-                        }
-                    };
+                // by construction there can't be any self-loops
+                debug_assert_ne!(source, target);
+                if !is_directed && source > target {
+                    continue;
                 }
-                let mut num_edges = 1;
-                let mut previous = source;
                 // remove auxiliary nodes
+                let mut previous = source;
                 while target as usize >= res.node_count() {
-                    num_edges += 1;
                     let d = g.g.d[target as usize];
                     debug_assert_eq!(d, if is_directed { 1 } else { 2 });
                     let start = g.g.v[target as usize] as usize;
@@ -254,15 +294,14 @@ where
                     std::mem::swap(&mut new_source, &mut new_target);
                 }
 
-                for _ in 0..num_edges {
-                    let w = g
-                        .edges
-                        .get_mut(&(source, target))
-                        .unwrap()
-                        .pop()
-                        .unwrap();
-
-                    edges.push((new_source, new_target, w));
+                let weights = g.edges.remove(&(source as usize, target as usize));
+                if let Some(weights) = weights {
+                    for w in weights {
+                        edges.push((new_source, new_target, w));
+                    }
+                } else {
+                    // the same edge can only be hit twice in self-loops
+                    debug_assert_eq!(source, target);
                 }
             }
         }
@@ -298,7 +337,7 @@ mod tests {
     fn tst_conv<N, E, Ty, Ix>(g: Graph<N, E, Ty, Ix>)
     where
         N: Clone + Debug + Ord,
-        E: Clone + Debug + Ord,
+        E: Clone + Debug + Ord + Hash,
         Ty: Debug + EdgeType,
         Ix: IndexType,
     {
