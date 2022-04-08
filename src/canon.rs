@@ -154,7 +154,7 @@ mod tests {
         graph::{Graph, IndexType},
         Directed, EdgeType, Undirected,
     };
-    use rand::{distributions::Uniform, prelude::*};
+    use rand::prelude::*;
     use testing::GraphIter;
 
     use rand_xoshiro::Xoshiro256Plus;
@@ -235,8 +235,7 @@ mod tests {
         log_init();
 
         let mut rng = Xoshiro256Plus::seed_from_u64(0);
-        let mut graphs = GraphIter::<Undirected>::default();
-        graphs.edge_wt_distr = Uniform::from(0..=0);
+        let graphs = GraphIter::<Undirected>::default();
 
         for g in graphs.take(1000) {
             debug!("Initial graph: {g:#?}");
@@ -258,8 +257,7 @@ mod tests {
         log_init();
 
         let mut rng = Xoshiro256Plus::seed_from_u64(0);
-        let mut graphs = GraphIter::<Directed>::default();
-        graphs.edge_wt_distr = Uniform::from(0..=0);
+        let graphs = GraphIter::<Directed>::default();
 
         for g in graphs.take(700) {
             debug!("Initial graph: {g:#?}");

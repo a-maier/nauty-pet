@@ -16,7 +16,7 @@ pub struct GraphIter<Ty: EdgeType> {
     rng: Xoshiro256Plus,
     node_distr: Uniform<usize>,
     node_wt_distr: Uniform<u8>,
-    pub edge_wt_distr: Uniform<u8>,
+    edge_wt_distr: Uniform<u8>,
     edge_distr: Normal<f64>,
     edge_type: PhantomData<Ty>,
 }
