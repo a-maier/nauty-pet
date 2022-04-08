@@ -13,7 +13,7 @@
 //! Afterwards, add this to your Cargo.toml:
 //! ```toml
 //! [dependencies]
-//! nauty-pet = "0.3"
+//! nauty-pet = "0.4"
 //! ```
 //!
 //! # Example
