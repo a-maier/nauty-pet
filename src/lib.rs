@@ -35,13 +35,6 @@
 //! let c2 = g2.into_canon();
 //! assert!(c1.is_identical(&c2))
 //! ```
-//!
-//! # Caveats
-//!
-//! Edge weights are not considered when finding a canonical form. In
-//! general, the canonical form is only unique if all edge weights are
-//! the same.
-//!
 mod autom;
 mod canon;
 mod cmp;
