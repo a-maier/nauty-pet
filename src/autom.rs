@@ -1,12 +1,12 @@
 use std::cmp::Ord;
-use std::convert::{Infallible, From};
+use std::convert::{From, Infallible};
 use std::hash::Hash;
 
 use crate::sparse_graph::SparseGraph;
 
 use nauty_Traces_sys::{
-    optionblk, sparsenauty, statsblk, Traces, TracesOptions,
-    TracesStats, FALSE, TRUE,
+    optionblk, sparsenauty, statsblk, Traces, TracesOptions, TracesStats,
+    FALSE, TRUE,
 };
 use petgraph::{
     graph::{Graph, IndexType},
@@ -38,7 +38,7 @@ impl From<TracesStats> for Autom {
             grpsize_base: o.grpsize1,
             grpsize_exp: o.grpsize2 as u32,
             num_orbits: o.numorbits as u32,
-            num_generators: o.numgenerators as u32
+            num_generators: o.numgenerators as u32,
         }
     }
 }
@@ -49,7 +49,7 @@ impl From<statsblk> for Autom {
             grpsize_base: o.grpsize1,
             grpsize_exp: o.grpsize2 as u32,
             num_orbits: o.numorbits as u32,
-            num_generators: o.numgenerators as u32
+            num_generators: o.numgenerators as u32,
         }
     }
 }
@@ -165,10 +165,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use petgraph::{
-        graph::DiGraph,
-        Undirected,
-    };
+    use petgraph::{graph::DiGraph, Undirected};
 
     fn log_init() {
         let _ = env_logger::builder().is_test(true).try_init();
@@ -179,9 +176,7 @@ mod tests {
         log_init();
 
         use petgraph::visit::NodeIndexable;
-        let g = DiGraph::<u8, ()>::from_edges([
-            (0, 1),
-        ]);
+        let g = DiGraph::<u8, ()>::from_edges([(0, 1)]);
         let autom = g.clone().try_into_autom().unwrap();
         assert_eq!(autom.grpsize_base, 1.);
         assert_eq!(autom.grpsize_exp, 0);
@@ -201,9 +196,7 @@ mod tests {
         log_init();
 
         use petgraph::visit::EdgeIndexable;
-        let g = DiGraph::<(), u8>::from_edges([
-            (0, 1), (1, 2), (2, 0)
-        ]);
+        let g = DiGraph::<(), u8>::from_edges([(0, 1), (1, 2), (2, 0)]);
         let autom = g.clone().try_into_autom().unwrap();
         assert_eq!(autom.grpsize_base, 3.);
         assert_eq!(autom.grpsize_exp, 0);
@@ -217,5 +210,4 @@ mod tests {
         assert_eq!(autom.grpsize_base, 2.);
         assert_eq!(autom.grpsize_exp, 0);
     }
-
 }

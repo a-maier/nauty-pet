@@ -65,17 +65,15 @@ where
     fn from(g: Graph<N, E, Ty, Ix>) -> Self {
         use petgraph::visit::NodeIndexable;
         let is_directed = g.is_directed();
-        let mut edges = Vec::from_iter(g.edge_references().map(|e| {
-            (g.to_index(e.source()), g.to_index(e.target()))
-        }));
+        let mut edges = Vec::from_iter(
+            g.edge_references()
+                .map(|e| (g.to_index(e.source()), g.to_index(e.target()))),
+        );
         let (nodes, e) = g.into_nodes_edges();
         let e_weights = Vec::from_iter(e.into_iter().map(|e| e.weight));
 
-        let node_weights = relabel_to_contiguous_node_weights(
-            nodes,
-            &mut edges,
-            is_directed
-        );
+        let node_weights =
+            relabel_to_contiguous_node_weights(nodes, &mut edges, is_directed);
 
         // edge weights
         // we combine multiple edges into a single one with an
@@ -98,14 +96,17 @@ where
         }
         let mut edge_weight_counts = Vec::from_iter(edge_weight_counts);
         edge_weight_counts.sort_unstable();
-        let max_pos = edge_weight_counts.iter().enumerate()
+        let max_pos = edge_weight_counts
+            .iter()
+            .enumerate()
             .max_by_key(|(_n, (_k, v))| v)
             .map(|(n, _)| n);
         if let Some(max_pos) = max_pos {
             edge_weight_counts.remove(max_pos);
         }
 
-        let aux_vertex_type: AHashMap<_, _> = edge_weight_counts.into_iter()
+        let aux_vertex_type: AHashMap<_, _> = edge_weight_counts
+            .into_iter()
             .enumerate()
             .map(|(n, (k, _))| (k, n))
             .collect();
@@ -134,18 +135,17 @@ where
             num_nauty_edges *= 2
         }
 
-        let mut aux_vx_idx = Vec::from_iter(
-            num_aux.iter().scan(
-                node_weights.len(),
-                |partial_sum, n| {
-                    let idx = *partial_sum;
-                    *partial_sum += n;
-                    Some(idx)
-                })
-        );
+        let mut aux_vx_idx = Vec::from_iter(num_aux.iter().scan(
+            node_weights.len(),
+            |partial_sum, n| {
+                let idx = *partial_sum;
+                *partial_sum += n;
+                Some(idx)
+            },
+        ));
         let mut adj = vec![vec![]; num_nauty_vertices];
         fn add_edge(
-            adj: &mut[Vec<c_int>],
+            adj: &mut [Vec<c_int>],
             source: usize,
             target: usize,
             is_directed: bool,
@@ -160,14 +160,24 @@ where
             let (source, target) = *edge;
             if let Some(&aux_vx_type) = aux_vertex_type.get(wt.as_slice()) {
                 // non-default weight, introduce an extra vertex
-                add_edge(&mut adj, source, aux_vx_idx[aux_vx_type], is_directed);
+                add_edge(
+                    &mut adj,
+                    source,
+                    aux_vx_idx[aux_vx_type],
+                    is_directed,
+                );
                 if source == target {
                     // self-loop, introduce one more vertex
                     let start = aux_vx_idx[aux_vx_type];
                     add_edge(&mut adj, start, start + 1, is_directed);
                     aux_vx_idx[aux_vx_type] += 1;
                 }
-                add_edge(&mut adj, aux_vx_idx[aux_vx_type], target, is_directed);
+                add_edge(
+                    &mut adj,
+                    aux_vx_idx[aux_vx_type],
+                    target,
+                    is_directed,
+                );
                 aux_vx_idx[aux_vx_type] += 1;
             } else if source == target {
                 // self-loop with default weight, add two auxiliary vertices
@@ -245,10 +255,8 @@ where
         }
 
         // nodes
-        let mut node_weights = Vec::from_iter(izip!(
-            relabel.iter().copied(),
-            g.nodes.weights
-        ));
+        let mut node_weights =
+            Vec::from_iter(izip!(relabel.iter().copied(), g.nodes.weights));
         node_weights.sort_unstable_by_key(|e| e.0);
         for (n, i) in node_weights.iter().map(|(i, _w)| i).enumerate() {
             debug_assert_eq!(n, *i as usize)
@@ -294,7 +302,8 @@ where
                     std::mem::swap(&mut new_source, &mut new_target);
                 }
 
-                let weights = g.edges.remove(&(source as usize, target as usize));
+                let weights =
+                    g.edges.remove(&(source as usize, target as usize));
                 if let Some(weights) = weights {
                     for w in weights {
                         edges.push((new_source, new_target, w));
