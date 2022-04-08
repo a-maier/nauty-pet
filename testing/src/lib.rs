@@ -28,7 +28,7 @@ impl<Ty: EdgeType> Default for GraphIter<Ty> {
             node_distr: Uniform::from(1..10),
             node_wt_distr: Uniform::from(0..3),
             edge_wt_distr: Uniform::from(0..3),
-            edge_distr: Normal::new(0.5, 1.0).unwrap(),
+            edge_distr: Normal::new(0., 1.0).unwrap(),
             edge_type: PhantomData
         }
     }
