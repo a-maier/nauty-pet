@@ -71,6 +71,9 @@ where
     Ty: EdgeType,
 {
     fn into_canon_nauty_sparse(self) -> Self {
+        if self.node_count() == 0 {
+            return self;
+        }
         let mut options = optionblk::default_sparse();
         options.getcanon = TRUE;
         options.defaultptn = FALSE;
@@ -103,6 +106,9 @@ where
     type Error = TracesError<N, E, Ix>;
 
     fn try_into_canon_traces(self) -> Result<Self, Self::Error> {
+        if self.node_count() == 0 {
+            return Ok(self);
+        }
         if has_self_loop(&self) {
             return Err(TracesError::SelfLoop(self));
         }
@@ -272,5 +278,13 @@ mod tests {
             assert!(is_isomorphic(&g, &gg));
             assert!(g.is_identical(&gg));
         }
+    }
+
+    #[test]
+    fn empty() {
+        log_init();
+
+        let g = Graph::<(), (), _>::new_undirected();
+        assert!(g.is_identical(&g.clone().into_canon()));
     }
 }

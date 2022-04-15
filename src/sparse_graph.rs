@@ -209,9 +209,11 @@ where
                 *ptn = 0;
             }
         }
-        ptn[node_weights.len() - 1] = 0;
-        for i in aux_vx_idx {
-            ptn[i - 1] = 0;
+        if !ptn.is_empty() {
+            ptn[node_weights.len() - 1] = 0;
+            for i in aux_vx_idx {
+                ptn[i - 1] = 0;
+            }
         }
         let lab = (0..g.v.len() as i32).collect();
         let nodes = Nodes {
@@ -361,6 +363,8 @@ mod tests {
     #[test]
     fn simple_conversion() {
         log_init();
+
+        tst_conv(Graph::<(), (), _>::new_undirected());
         tst_conv(UnGraph::<(), ()>::from_edges([(0, 1), (2, 0)]));
         tst_conv(UnGraph::<(), i32>::from_edges([(0, 1, -1), (2, 0, 1)]));
         tst_conv(DiGraph::<(), ()>::from_edges([
