@@ -1,11 +1,11 @@
 use nauty_pet::prelude::*;
-use nauty_pet::canon::{IntoCanonNautySparse, TracesError, TryIntoCanonTraces};
+use nauty_pet::canon::{IntoCanonNautySparse, IntoCanonTraces};
 use testing::{GraphIter, randomize_labels};
 
 use criterion::{BatchSize, black_box, criterion_group, criterion_main, Criterion};
 use petgraph::{
     EdgeType,
-    graph::{Graph, IndexType},
+    graph::{Graph, IndexType, UnGraph},
     Directed, Undirected,
 };
 use rand::prelude::*;
@@ -22,13 +22,11 @@ fn iso_nauty<Ty: EdgeType, Ix: IndexType>(
 }
 
 fn iso_traces<Ix: IndexType>(
-    graphs: impl IntoIterator<Item = (Graph<u8, u8, Undirected, Ix>, Graph<u8, u8, Undirected, Ix>)>
+    graphs: impl IntoIterator<Item = (UnGraph<u8, u8, Ix>, UnGraph<u8, u8, Ix>)>
 ) -> bool {
     graphs.into_iter().all(|(g, h)| {
-        let foo: Result<_, TracesError<_, _, _>> = g.try_into_canon_traces();
-        let foo = foo.unwrap();
-        foo.is_identical(
-            &h.try_into_canon_traces().unwrap()
+        g.into_canon_traces().is_identical(
+            &h.into_canon_traces()
         )
     })
 }
@@ -45,7 +43,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("undirected nauty", move |b| {
         b.iter_batched(|| g.clone(), |g| iso_nauty(black_box(g)), BatchSize::SmallInput)
     });
-    c.bench_function("undirected nauty", move |b| {
+    c.bench_function("undirected traces", move |b| {
         b.iter_batched(|| graphs.clone(), |g| iso_traces(black_box(g)), BatchSize::SmallInput)
     });
 
