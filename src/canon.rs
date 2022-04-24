@@ -1,18 +1,18 @@
 use crate::sparse_graph::SparseGraph;
 
 use std::cmp::Ord;
+use std::convert::Infallible;
 use std::hash::Hash;
+use std::fmt::Debug;
 
 use nauty_Traces_sys::{
     optionblk, sparsegraph, sparsenauty, statsblk, Traces, TracesOptions,
     TracesStats, FALSE, SG_FREE, TRUE,
 };
 use petgraph::{
-    graph::{DiGraph, Graph, IndexType, UnGraph},
-    visit::EdgeRef,
+    graph::{IndexType, Graph, DiGraph, UnGraph},
     EdgeType,
 };
-use thiserror::Error;
 
 /// Find the canonical labelling for a graph
 ///
@@ -22,9 +22,26 @@ pub trait IntoCanon {
     fn into_canon(self) -> Self;
 }
 
+/// Try to find the canonical labelling for a graph
+pub trait TryIntoCanon {
+    type Error;
+
+    fn try_into_canon(self) -> Result<Self, Self::Error>
+    where
+        Self: Sized;
+}
+
 /// Use sparse nauty to find the canonical labelling
 pub trait IntoCanonNautySparse {
     fn into_canon_nauty_sparse(self) -> Self;
+}
+
+pub trait TryIntoCanonNautySparse {
+    type Error;
+
+    fn try_into_canon_nauty_sparse(self) -> Result<Self, Self::Error>
+    where
+        Self: Sized;
 }
 
 /// Use dense nauty to find the canonical labelling
@@ -32,7 +49,19 @@ pub trait IntoCanonNautyDense {
     fn into_canon_nauty_dense(self) -> Self;
 }
 
-/// Use Traces to find the canonical labelling
+pub trait TryIntoCanonNautyDense {
+    type Error;
+
+    fn try_into_canon_nauty_dense(self) -> Result<Self, Self::Error>
+    where
+        Self: Sized;
+}
+
+/// Use dense nauty to find the canonical labelling
+pub trait IntoCanonTraces {
+    fn into_canon_traces(self) -> Self;
+}
+
 pub trait TryIntoCanonTraces {
     type Error;
 
@@ -41,38 +70,51 @@ pub trait TryIntoCanonTraces {
         Self: Sized;
 }
 
-impl<N, E, Ix: IndexType> IntoCanon for UnGraph<N, E, Ix>
+impl<N, E, Ty: EdgeType, Ix: IndexType> IntoCanon for Graph<N, E, Ty, Ix>
+where
+    Graph<N, E, Ty, Ix>: TryIntoCanon,
+    <Graph<N, E, Ty, Ix> as TryIntoCanon>::Error: Debug,
+{
+    fn into_canon(self) -> Self {
+        self.try_into_canon().unwrap()
+    }
+}
+
+impl<N, E, Ix: IndexType> TryIntoCanon for UnGraph<N, E, Ix>
 where
     N: Ord,
     E: Hash + Ord,
 {
-    fn into_canon(self) -> Self {
-        match self.try_into_canon_traces() {
-            Ok(c) => c,
-            Err(TracesError::SelfLoop(g)) => g.into_canon_nauty_sparse(),
-        }
+    type Error = Infallible;
+
+    fn try_into_canon(self) -> Result<Self, Self::Error> {
+        self.try_into_canon_traces()
     }
 }
 
-impl<N, E, Ix: IndexType> IntoCanon for DiGraph<N, E, Ix>
+impl<N, E, Ix: IndexType> TryIntoCanon for DiGraph<N, E, Ix>
 where
     N: Ord,
     E: Hash + Ord,
 {
-    fn into_canon(self) -> Self {
-        self.into_canon_nauty_sparse()
+    type Error = Infallible;
+
+    fn try_into_canon(self) -> Result<Self, Self::Error> {
+        self.try_into_canon_nauty_sparse()
     }
 }
 
-impl<N, E, Ty, Ix: IndexType> IntoCanonNautySparse for Graph<N, E, Ty, Ix>
+impl<N, E, Ty, Ix: IndexType> TryIntoCanonNautySparse for Graph<N, E, Ty, Ix>
 where
     N: Ord,
     E: Hash + Ord,
     Ty: EdgeType,
 {
-    fn into_canon_nauty_sparse(self) -> Self {
+    type Error = Infallible; // TODO: propagate nauty error
+
+    fn try_into_canon_nauty_sparse(self) -> Result<Self, Self::Error> {
         if self.node_count() == 0 {
-            return self;
+            return Ok(self);
         }
         let mut options = optionblk::default_sparse();
         options.getcanon = TRUE;
@@ -94,7 +136,17 @@ where
             );
             SG_FREE(&mut cg);
         }
-        sg.into()
+        Ok(sg.into())
+    }
+}
+
+impl<N, E, Ty, Ix> IntoCanonNautySparse for Graph<N, E, Ty, Ix>
+where
+    Graph<N, E, Ty, Ix>: TryIntoCanonNautySparse,
+    <Graph<N, E, Ty, Ix> as TryIntoCanonNautySparse>::Error: Debug,
+{
+    fn into_canon_nauty_sparse(self) -> Self {
+        self.try_into_canon_nauty_sparse().unwrap()
     }
 }
 
@@ -103,14 +155,11 @@ where
     N: Ord,
     E: Hash + Ord,
 {
-    type Error = TracesError<N, E, Ix>;
+    type Error = Infallible;
 
     fn try_into_canon_traces(self) -> Result<Self, Self::Error> {
         if self.node_count() == 0 {
             return Ok(self);
-        }
-        if has_self_loop(&self) {
-            return Err(TracesError::SelfLoop(self));
         }
         let mut options = TracesOptions {
             getcanon: TRUE,
@@ -138,16 +187,14 @@ where
     }
 }
 
-#[derive(Error, Debug)]
-pub enum TracesError<N, E, Ix: IndexType> {
-    #[error("Graph has at least one self-loop")]
-    SelfLoop(UnGraph<N, E, Ix>),
-}
-
-fn has_self_loop<N, E, Ty: EdgeType, Ix: IndexType>(
-    g: &Graph<N, E, Ty, Ix>,
-) -> bool {
-    g.edge_references().any(|e| e.source() == e.target())
+impl<N, E, Ix> IntoCanonTraces for UnGraph<N, E, Ix>
+where
+    UnGraph<N, E, Ix>: TryIntoCanonTraces,
+    <UnGraph<N, E, Ix> as TryIntoCanonTraces>::Error: Debug,
+{
+    fn into_canon_traces(self) -> Self {
+        self.try_into_canon_traces().unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -156,7 +203,7 @@ mod tests {
     use super::*;
     use petgraph::{
         algo::isomorphism::is_isomorphic,
-        graph::Graph,
+        graph::{Graph, UnGraph},
         Directed, Undirected,
     };
     use rand::prelude::*;
@@ -203,7 +250,7 @@ mod tests {
     }
 
     #[test]
-    fn random_canon_undirected() {
+    fn random_canon_nauty_sparse_undirected() {
         log_init();
 
         let mut rng = Xoshiro256Plus::seed_from_u64(0);
@@ -214,10 +261,10 @@ mod tests {
             let gg = randomize_labels(g.clone(), &mut rng);
             debug!("Randomised graph: {gg:#?}");
             assert!(is_isomorphic(&g, &gg));
-            let g = g.into_canon();
+            let g = g.into_canon_nauty_sparse();
             debug!("Canonical graph (from initial): {g:#?}");
             assert!(is_isomorphic(&g, &gg));
-            let gg = gg.into_canon();
+            let gg = gg.into_canon_nauty_sparse();
             debug!("Canonical graph (from randomised): {gg:#?}");
             assert!(is_isomorphic(&g, &gg));
             assert!(g.is_identical(&gg));
@@ -225,7 +272,7 @@ mod tests {
     }
 
     #[test]
-    fn random_canon_directed() {
+    fn random_canon_nauty_sparse_directed() {
         log_init();
 
         let mut rng = Xoshiro256Plus::seed_from_u64(0);
@@ -236,10 +283,32 @@ mod tests {
             let gg = randomize_labels(g.clone(), &mut rng);
             debug!("Randomised graph: {gg:#?}");
             assert!(is_isomorphic(&g, &gg));
-            let g = g.into_canon();
+            let g = g.into_canon_nauty_sparse();
             debug!("Canonical graph (from initial): {g:#?}");
             assert!(is_isomorphic(&g, &gg));
-            let gg = gg.into_canon();
+            let gg = gg.into_canon_nauty_sparse();
+            debug!("Canonical graph (from randomised): {gg:#?}");
+            assert!(is_isomorphic(&g, &gg));
+            assert!(g.is_identical(&gg));
+        }
+    }
+
+    #[test]
+    fn random_canon_traces_undirected() {
+        log_init();
+
+        let mut rng = Xoshiro256Plus::seed_from_u64(0);
+        let graphs = GraphIter::<Undirected>::default();
+
+        for g in graphs.take(1000) {
+            debug!("Initial graph: {g:#?}");
+            let gg = randomize_labels(g.clone(), &mut rng);
+            debug!("Randomised graph: {gg:#?}");
+            assert!(is_isomorphic(&g, &gg));
+            let g = g.into_canon_traces();
+            debug!("Canonical graph (from initial): {g:#?}");
+            assert!(is_isomorphic(&g, &gg));
+            let gg = gg.into_canon_traces();
             debug!("Canonical graph (from randomised): {gg:#?}");
             assert!(is_isomorphic(&g, &gg));
             assert!(g.is_identical(&gg));
