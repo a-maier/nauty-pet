@@ -119,7 +119,11 @@ where
         let mut options = optionblk::default_sparse();
         options.getcanon = TRUE;
         options.defaultptn = FALSE;
-        options.digraph = TRUE;
+        options.digraph = if self.is_directed() {
+            TRUE
+        } else {
+            FALSE
+        };
         let mut stats = statsblk::default();
         let mut sg = SparseGraph::from(self);
         let mut orbits = vec![0; sg.g.v.len()];
@@ -164,7 +168,7 @@ where
         let mut options = TracesOptions {
             getcanon: TRUE,
             defaultptn: FALSE,
-            digraph: TRUE,
+            digraph: FALSE,
             ..Default::default()
         };
         let mut stats = TracesStats::default();
