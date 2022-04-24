@@ -36,7 +36,7 @@
 //! assert!(c1.is_identical(&c2))
 //! ```
 mod autom;
-mod canon;
+pub mod canon;
 mod cmp;
 pub mod prelude;
 mod sparse_graph;

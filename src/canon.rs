@@ -154,14 +154,13 @@ fn has_self_loop<N, E, Ty: EdgeType, Ix: IndexType>(
 mod tests {
     use super::super::cmp::IsIdentical;
     use super::*;
-    use itertools::izip;
     use petgraph::{
         algo::isomorphism::is_isomorphic,
-        graph::{Graph, IndexType},
-        Directed, EdgeType, Undirected,
+        graph::Graph,
+        Directed, Undirected,
     };
     use rand::prelude::*;
-    use testing::GraphIter;
+    use testing::{GraphIter, randomize_labels};
 
     use rand_xoshiro::Xoshiro256Plus;
 
@@ -201,39 +200,6 @@ mod tests {
         let g2 = g2.into_canon();
 
         assert!(g1.is_identical(&g2));
-    }
-
-    fn randomize_labels<N, E, Ty, Ix>(
-        g: Graph<N, E, Ty, Ix>,
-        rng: &mut impl Rng,
-    ) -> Graph<N, E, Ty, Ix>
-    where
-        Ty: EdgeType,
-        Ix: IndexType,
-    {
-        use petgraph::visit::NodeIndexable;
-        let mut res = Graph::with_capacity(g.node_count(), g.edge_count());
-        let edges = Vec::from_iter(g.edge_references().map(|e| {
-            let source = g.to_index(e.source());
-            let target = g.to_index(e.target());
-            (source, target)
-        }));
-        let (nodes, edge_wts) = g.into_nodes_edges();
-        let mut nodes =
-            Vec::from_iter(nodes.into_iter().map(|n| n.weight).enumerate());
-        nodes.shuffle(rng);
-        let mut relabel = vec![0; nodes.len()];
-        for (new, (old, w)) in nodes.into_iter().enumerate() {
-            res.add_node(w);
-            relabel[old] = new;
-        }
-        let edges = izip!(edges, edge_wts).map(|((source, target), w)| {
-            (relabel[source], relabel[target], w.weight)
-        });
-        for (source, target, w) in edges {
-            res.add_edge(res.from_index(source), res.from_index(target), w);
-        }
-        res
     }
 
     #[test]

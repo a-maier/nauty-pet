@@ -2,8 +2,9 @@ use std::marker::PhantomData;
 
 use petgraph::{
     algo::connected_components,
-    graph::Graph,
+    graph::{IndexType, Graph},
     EdgeType,
+    visit::EdgeRef,
 };
 use rand::{
     distributions::Uniform,
@@ -63,4 +64,37 @@ impl<Ty: EdgeType> Iterator for GraphIter<Ty> {
         }
         Some(g)
     }
+}
+
+pub fn randomize_labels<N, E, Ty, Ix>(
+    g: Graph<N, E, Ty, Ix>,
+    rng: &mut impl Rng,
+) -> Graph<N, E, Ty, Ix>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    use petgraph::visit::NodeIndexable;
+    let mut res = Graph::with_capacity(g.node_count(), g.edge_count());
+    let edges = Vec::from_iter(g.edge_references().map(|e| {
+        let source = g.to_index(e.source());
+        let target = g.to_index(e.target());
+        (source, target)
+    }));
+    let (nodes, edge_wts) = g.into_nodes_edges();
+    let mut nodes =
+        Vec::from_iter(nodes.into_iter().map(|n| n.weight).enumerate());
+    nodes.shuffle(rng);
+    let mut relabel = vec![0; nodes.len()];
+    for (new, (old, w)) in nodes.into_iter().enumerate() {
+        res.add_node(w);
+        relabel[old] = new;
+    }
+    let edges = edges.into_iter().zip(edge_wts.into_iter()).map(|((source, target), w)| {
+        (relabel[source], relabel[target], w.weight)
+    });
+    for (source, target, w) in edges {
+        res.add_edge(res.from_index(source), res.from_index(target), w);
+    }
+    res
 }
