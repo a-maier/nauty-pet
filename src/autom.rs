@@ -71,7 +71,9 @@ pub trait TryIntoAutom {
 }
 
 /// Analyse a graph's automorphism group using sparse nauty
-#[cfg(feature = "libc")]
+///
+/// Requires the `libc` feature
+#[cfg(any(feature = "libc", doc))]
 pub trait TryIntoAutomNautySparse {
     type Error;
 
@@ -86,7 +88,9 @@ pub trait TryIntoAutomNautyDense {
 }
 
 /// Analyse a graph's automorphism group using Traces
-#[cfg(feature = "libc")]
+///
+/// Requires the `libc` feature
+#[cfg(any(feature = "libc", doc))]
 pub trait TryIntoAutomTraces {
     type Error;
 

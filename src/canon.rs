@@ -39,13 +39,18 @@ pub trait TryIntoCanon {
         Self: Sized;
 }
 
-#[cfg(feature = "libc")]
 /// Use sparse nauty to find the canonical labelling
+///
+/// Requires the `libc` feature
+#[cfg(any(feature = "libc", doc))]
 pub trait IntoCanonNautySparse {
     fn into_canon_nauty_sparse(self) -> Self;
 }
 
-#[cfg(feature = "libc")]
+/// Use sparse nauty to find the canonical labelling
+///
+/// Requires the `libc` feature
+#[cfg(any(feature = "libc", doc))]
 pub trait TryIntoCanonNautySparse {
     type Error;
 
@@ -59,6 +64,7 @@ pub trait IntoCanonNautyDense {
     fn into_canon_nauty_dense(self) -> Self;
 }
 
+/// Use dense nauty to find the canonical labelling
 pub trait TryIntoCanonNautyDense {
     type Error;
 
@@ -68,13 +74,17 @@ pub trait TryIntoCanonNautyDense {
 }
 
 /// Use Traces to find the canonical labelling
-#[cfg(feature = "libc")]
+///
+/// Requires the `libc` feature
+#[cfg(any(feature = "libc", doc))]
 pub trait IntoCanonTraces {
     fn into_canon_traces(self) -> Self;
 }
 
 /// Use Traces to find the canonical labelling
-#[cfg(feature = "libc")]
+///
+/// Requires the `libc` feature
+#[cfg(any(feature = "libc", doc))]
 pub trait TryIntoCanonTraces {
     type Error;
 

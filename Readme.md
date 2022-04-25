@@ -7,16 +7,8 @@ find [canonical
 labellings](https://en.wikipedia.org/wiki/Graph_canonization) for
 [petgraph](https://github.com/petgraph/petgraph) graphs.
 
-## Usage
-
 Version 2.6 or 2.7 of the nauty and Traces library has to be
-installed first and _linked to the same C library as this crate_.
-
-Afterwards, add this to your Cargo.toml:
-```toml
-[dependencies]
-nauty-pet = "0.4"
-```
+installed separately before installing this crate.
 
 ## Example
 
@@ -36,6 +28,18 @@ assert_eq!(automorphism_info.grpsize(), 2.);
 let c1 = g1.into_canon();
 let c2 = g2.into_canon();
 assert!(c1.is_identical(&c2))
+```
+
+## Features
+
+To enable the use of sparse graphs for canonisation, ensure that
+the nauty and Traces library is linked to the same C library as
+this crate.
+
+Afterwards, add this to your Cargo.toml:
+```toml
+[dependencies]
+nauty-pet = { version = "0.4", features = ["libc"] }
 ```
 
 License: Apache-2.0
