@@ -7,12 +7,14 @@ use std::fmt::Debug;
 
 use nauty_Traces_sys::{
     densenauty, empty_graph, optionblk, sparsegraph, sparsenauty,
-    statsblk, Traces, TracesOptions, TracesStats, FALSE, SG_FREE, TRUE
+    statsblk, Traces, TracesOptions, TracesStats, MTOOBIG, NTOOBIG,
+    FALSE, SG_FREE, TRUE
 };
 use petgraph::{
     graph::{IndexType, Graph, DiGraph, UnGraph},
     EdgeType,
 };
+use thiserror::Error;
 
 /// Find the canonical labelling for a graph
 ///
@@ -104,13 +106,24 @@ where
     }
 }
 
+#[derive(Debug, Error)]
+#[non_exhaustive]
+pub enum CanonError {
+     #[error("Too much memory needed")]
+    MTooBig,
+     #[error("Too many nodes")]
+    NTooBig,
+    //  #[error("Aborted by user code")]
+    // Aborted,
+}
+
 impl<N, E, Ty, Ix: IndexType> TryIntoCanonNautySparse for Graph<N, E, Ty, Ix>
 where
     N: Ord,
     E: Hash + Ord,
     Ty: EdgeType,
 {
-    type Error = Infallible; // TODO: propagate nauty error
+    type Error = Infallible;
 
     fn try_into_canon_nauty_sparse(self) -> Result<Self, Self::Error> {
         if self.node_count() == 0 {
@@ -140,6 +153,7 @@ where
             );
             SG_FREE(&mut cg);
         }
+        debug_assert_eq!(stats.errstatus, 0);
         Ok(sg.into())
     }
 }
@@ -160,9 +174,10 @@ where
     E: Hash + Ord,
     Ty: EdgeType,
 {
-    type Error = Infallible; // TODO: propagate nauty error
+    type Error = CanonError;
 
     fn try_into_canon_nauty_dense(self) -> Result<Self, Self::Error> {
+        use CanonError::*;
         use ::std::os::raw::c_int;
 
         if self.node_count() == 0 {
@@ -193,7 +208,12 @@ where
                 cg.as_mut_ptr(),
             );
         }
-        Ok(dg.into())
+        match stats.errstatus {
+            0 => Ok(dg.into()),
+            MTOOBIG => Err(MTooBig),
+            NTOOBIG => Err(NTooBig),
+            _ => unreachable!()
+        }
     }
 }
 
@@ -240,6 +260,7 @@ where
             );
             SG_FREE(&mut cg);
         }
+        debug_assert_eq!(stats.errstatus, 0);
         Ok(sg.into())
     }
 }
