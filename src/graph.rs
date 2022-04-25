@@ -336,7 +336,58 @@ fn inv_perm(perm: &[c_int]) -> Vec<usize> {
     relabel
 }
 
-//TODO: code duplication
+fn into_graph<N, E, Ty, Ix>(
+    node_weights: Vec<(N, Vec<E>)>,
+    edge_weights: AHashMap<(usize, usize), Vec<E>>,
+    lab: &[c_int],
+) -> Graph<N, E, Ty, Ix>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+    E: Ord,
+{
+    // TODO: check if precalculating the number of edges helps
+    let mut res = Graph::with_capacity(node_weights.len(), 0);
+    let relabel = inv_perm(lab);
+    let mut edges = Vec::new();
+    let is_directed = Ty::is_directed();
+
+    // nodes + self-loops
+    let mut node_weights =
+        Vec::from_iter(izip!(relabel.iter().copied(), node_weights));
+    node_weights.sort_unstable_by_key(|e| e.0);
+    for (n, i) in node_weights.iter().map(|(i, _w)| i).enumerate() {
+        debug_assert_eq!(n, *i as usize)
+    }
+    for (_, (w, loops)) in node_weights {
+        for w in loops {
+            edges.push((res.node_count(), res.node_count(), w))
+        }
+        res.add_node(w);
+    }
+
+    // edges
+    for ((source, target), weights) in edge_weights {
+        let mut source = relabel[source as usize];
+        let mut target = relabel[target as usize];
+        if !is_directed && source > target {
+            std::mem::swap(&mut source, &mut target);
+        }
+        for w in weights {
+            edges.push((source, target, w));
+        }
+    }
+    edges.sort_unstable();
+    for (source, target, weight) in edges {
+        use petgraph::visit::NodeIndexable;
+        let source = res.from_index(source as usize);
+        let target = res.from_index(target as usize);
+        res.add_edge(source, target, weight);
+    }
+
+    res
+}
+
 impl<N, E, Ty, Ix> From<DenseGraph<(N, Vec<E>), E, Ty>> for Graph<N, E, Ty, Ix>
 where
     Ty: EdgeType,
@@ -344,46 +395,7 @@ where
     E: Ord,
 {
     fn from(g: DenseGraph<(N, Vec<E>), E, Ty>) -> Self {
-        // TODO: check if precalculating the number of edges helps
-        let mut res = Graph::with_capacity(g.nodes.weights.len(), 0);
-        let relabel = inv_perm(&g.nodes.lab);
-        let mut edges = Vec::new();
-        let is_directed = Ty::is_directed();
-
-        // nodes + self-loops
-        let mut node_weights =
-            Vec::from_iter(izip!(relabel.iter().copied(), g.nodes.weights));
-        node_weights.sort_unstable_by_key(|e| e.0);
-        for (n, i) in node_weights.iter().map(|(i, _w)| i).enumerate() {
-            debug_assert_eq!(n, *i as usize)
-        }
-        for (_, (w, loops)) in node_weights {
-            for w in loops {
-                edges.push((res.node_count(), res.node_count(), w))
-            }
-            res.add_node(w);
-        }
-
-        // edges
-        for ((source, target), weights) in g.edges.into_iter() {
-            let mut source = relabel[source as usize];
-            let mut target = relabel[target as usize];
-            if !is_directed && source > target {
-                std::mem::swap(&mut source, &mut target);
-            }
-            for w in weights {
-                edges.push((source, target, w));
-            }
-        }
-        edges.sort_unstable();
-        for (source, target, weight) in edges {
-            use petgraph::visit::NodeIndexable;
-            let source = res.from_index(source as usize);
-            let target = res.from_index(target as usize);
-            res.add_edge(source, target, weight);
-        }
-
-        res
+        into_graph(g.nodes.weights, g.edges, &g.nodes.lab)
     }
 }
 
@@ -393,87 +405,8 @@ where
     Ix: IndexType,
     E: Ord,
 {
-    fn from(mut g: SparseGraph<(N, Vec<E>), E, Ty>) -> Self {
-        debug_assert_eq!(g.g.v.len(), g.g.d.len());
-        debug_assert_eq!(g.g.v.len(), g.nodes.ptn.len());
-        debug_assert_eq!(g.g.v.len(), g.nodes.lab.len());
-        debug_assert!(g.g.v.len() >= g.nodes.weights.len());
-        let is_directed = Ty::is_directed();
-        let nedges = if is_directed {
-            g.g.e.len()
-        } else {
-            debug_assert_eq!(g.g.e.len() % 2, 0);
-            g.g.e.len() / 2
-        } + g.nodes.weights.iter().map(|(_, loops)| loops.len()).sum::<usize>();
-        let mut res = Graph::with_capacity(g.nodes.weights.len(), nedges);
-
-        let relabel = inv_perm(&g.nodes.lab);
-
-        let mut edges = Vec::new();
-
-        // nodes + self-loops
-        let mut node_weights =
-            Vec::from_iter(izip!(relabel.iter().copied(), g.nodes.weights));
-        node_weights.sort_unstable_by_key(|e| e.0);
-        for (n, i) in node_weights.iter().map(|(i, _w)| i).enumerate() {
-            debug_assert_eq!(n, *i as usize)
-        }
-        for (_, (w, loops)) in node_weights {
-            for w in loops {
-                edges.push((res.node_count(), res.node_count(), w))
-            }
-            res.add_node(w);
-        }
-
-        // edges
-        let node_info = g.g.v.iter().zip(g.g.d.iter()).take(res.node_count());
-        for (source, (&adj_pos, &degree)) in node_info.enumerate() {
-            let source = source as c_int;
-            let start = adj_pos as usize;
-            let end = start + degree as usize;
-            for mut target in g.g.e[start..end].iter().copied() {
-                // by construction there can't be any self-loops
-                debug_assert_ne!(source, target);
-                if !is_directed && source > target {
-                    continue;
-                }
-                // remove auxiliary nodes
-                if target as usize >= res.node_count() {
-                    let d = g.g.d[target as usize];
-                    debug_assert_eq!(d, if is_directed { 1 } else { 2 });
-                    let start = g.g.v[target as usize] as usize;
-                    let end = start + d as usize;
-                    target = g.g.e[start..end]
-                        .iter()
-                        .copied()
-                        .find(|&t| t != source)
-                        .unwrap();
-                }
-                if !is_directed && source > target {
-                    continue;
-                }
-                let mut new_source = relabel[source as usize];
-                let mut new_target = relabel[target as usize];
-                if !is_directed && new_source > new_target {
-                    std::mem::swap(&mut new_source, &mut new_target);
-                }
-
-                let weights = g.edges
-                    .remove(&(source as usize, target as usize))
-                    .unwrap();
-                for w in weights {
-                    edges.push((new_source, new_target, w));
-                }
-            }
-        }
-        edges.sort_unstable();
-        for (source, target, weight) in edges {
-            use petgraph::visit::NodeIndexable;
-            let source = res.from_index(source as usize);
-            let target = res.from_index(target as usize);
-            res.add_edge(source, target, weight);
-        }
-        res
+    fn from(g: SparseGraph<(N, Vec<E>), E, Ty>) -> Self {
+        into_graph(g.nodes.weights, g.edges, &g.nodes.lab)
     }
 }
 
