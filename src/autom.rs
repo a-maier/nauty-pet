@@ -2,11 +2,12 @@ use std::cmp::Ord;
 use std::convert::{From, Infallible};
 use std::hash::Hash;
 
-use crate::graph::SparseGraph;
+use crate::error::NautyError;
+use crate::graph::{DenseGraph, SparseGraph};
 
 use nauty_Traces_sys::{
-    optionblk, sparsenauty, statsblk, Traces, TracesOptions, TracesStats,
-    FALSE, TRUE,
+    densenauty, MTOOBIG, NTOOBIG, optionblk, sparsenauty, statsblk,
+    Traces, TracesOptions, TracesStats, FALSE, TRUE,
 };
 use petgraph::{
     graph::{Graph, IndexType},
@@ -109,7 +110,11 @@ where
         let mut options = optionblk::default_sparse();
         options.getcanon = FALSE;
         options.defaultptn = FALSE;
-        options.digraph = TRUE;
+        options.digraph = if self.is_directed() {
+            TRUE
+        } else {
+            FALSE
+        };
         let mut stats = statsblk::default();
         let mut sg = SparseGraph::from(self);
         let mut orbits = vec![0; sg.g.v.len()];
@@ -124,7 +129,54 @@ where
                 std::ptr::null_mut(),
             );
         }
+        debug_assert_eq!(stats.errstatus, 0);
         Ok(stats.into())
+    }
+}
+
+impl<N, E, Ty, Ix> TryIntoAutomNautyDense for Graph<N, E, Ty, Ix>
+where
+    N: Ord,
+    E: Hash + Ord,
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    type Error = NautyError;
+
+    fn try_into_autom_nauty_dense(self) -> Result<Autom, Self::Error> {
+        use NautyError::*;
+        use ::std::os::raw::c_int;
+
+        let mut options = optionblk::default();
+        options.getcanon = FALSE;
+        options.defaultptn = FALSE;
+        options.digraph = if self.is_directed() {
+            TRUE
+        } else {
+            FALSE
+        };
+        let mut stats = statsblk::default();
+        let mut dg = DenseGraph::from(self);
+        let mut orbits = vec![0; dg.n];
+        unsafe {
+            densenauty(
+                dg.g.as_mut_ptr(),
+                dg.nodes.lab.as_mut_ptr(),
+                dg.nodes.ptn.as_mut_ptr(),
+                orbits.as_mut_ptr(),
+                &mut options,
+                &mut stats,
+                dg.m as c_int,
+                dg.n as c_int,
+                std::ptr::null_mut(),
+            );
+        }
+        match stats.errstatus {
+            0 => Ok(stats.into()),
+            MTOOBIG => Err(MTooBig),
+            NTOOBIG => Err(NTooBig),
+            _ => unreachable!()
+        }
     }
 }
 
@@ -158,6 +210,7 @@ where
                 std::ptr::null_mut(),
             );
         }
+        debug_assert_eq!(stats.errstatus, 0);
         Ok(stats.into())
     }
 }

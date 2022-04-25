@@ -1,3 +1,4 @@
+use crate::error::NautyError;
 use crate::graph::{DenseGraph, SparseGraph};
 
 use std::cmp::Ord;
@@ -14,7 +15,6 @@ use petgraph::{
     graph::{IndexType, Graph, DiGraph, UnGraph},
     EdgeType,
 };
-use thiserror::Error;
 
 /// Find the canonical labelling for a graph
 ///
@@ -106,17 +106,6 @@ where
     }
 }
 
-#[derive(Debug, Error)]
-#[non_exhaustive]
-pub enum CanonError {
-     #[error("Too much memory needed")]
-    MTooBig,
-     #[error("Too many nodes")]
-    NTooBig,
-    //  #[error("Aborted by user code")]
-    // Aborted,
-}
-
 impl<N, E, Ty, Ix: IndexType> TryIntoCanonNautySparse for Graph<N, E, Ty, Ix>
 where
     N: Ord,
@@ -174,10 +163,10 @@ where
     E: Hash + Ord,
     Ty: EdgeType,
 {
-    type Error = CanonError;
+    type Error = NautyError;
 
     fn try_into_canon_nauty_dense(self) -> Result<Self, Self::Error> {
-        use CanonError::*;
+        use NautyError::*;
         use ::std::os::raw::c_int;
 
         if self.node_count() == 0 {

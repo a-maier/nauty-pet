@@ -37,6 +37,7 @@
 //! ```
 mod autom;
 pub mod canon;
+pub mod error;
 mod cmp;
 pub mod prelude;
 mod graph;
