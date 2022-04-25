@@ -1,4 +1,4 @@
-use crate::sparse_graph::SparseGraph;
+use crate::graph::{DenseGraph, SparseGraph};
 
 use std::cmp::Ord;
 use std::convert::Infallible;
@@ -6,8 +6,8 @@ use std::hash::Hash;
 use std::fmt::Debug;
 
 use nauty_Traces_sys::{
-    optionblk, sparsegraph, sparsenauty, statsblk, Traces, TracesOptions,
-    TracesStats, FALSE, SG_FREE, TRUE,
+    densenauty, empty_graph, optionblk, sparsegraph, sparsenauty,
+    statsblk, Traces, TracesOptions, TracesStats, FALSE, SG_FREE, TRUE
 };
 use petgraph::{
     graph::{IndexType, Graph, DiGraph, UnGraph},
@@ -154,6 +154,59 @@ where
     }
 }
 
+impl<N, E, Ty, Ix: IndexType> TryIntoCanonNautyDense for Graph<N, E, Ty, Ix>
+where
+    N: Ord,
+    E: Hash + Ord,
+    Ty: EdgeType,
+{
+    type Error = Infallible; // TODO: propagate nauty error
+
+    fn try_into_canon_nauty_dense(self) -> Result<Self, Self::Error> {
+        use ::std::os::raw::c_int;
+
+        if self.node_count() == 0 {
+            return Ok(self);
+        }
+        let mut options = optionblk::default();
+        options.getcanon = TRUE;
+        options.defaultptn = FALSE;
+        options.digraph = if self.is_directed() {
+            TRUE
+        } else {
+            FALSE
+        };
+        let mut stats = statsblk::default();
+        let mut dg = DenseGraph::from(self);
+        let mut orbits = vec![0; dg.n];
+        let mut cg = empty_graph(dg.m, dg.n);
+        unsafe {
+            densenauty(
+                dg.g.as_mut_ptr(),
+                dg.nodes.lab.as_mut_ptr(),
+                dg.nodes.ptn.as_mut_ptr(),
+                orbits.as_mut_ptr(),
+                &mut options,
+                &mut stats,
+                dg.m as c_int,
+                dg.n as c_int,
+                cg.as_mut_ptr(),
+            );
+        }
+        Ok(dg.into())
+    }
+}
+
+impl<N, E, Ty, Ix> IntoCanonNautyDense for Graph<N, E, Ty, Ix>
+where
+    Graph<N, E, Ty, Ix>: TryIntoCanonNautyDense,
+    <Graph<N, E, Ty, Ix> as TryIntoCanonNautyDense>::Error: Debug,
+{
+    fn into_canon_nauty_dense(self) -> Self {
+        self.try_into_canon_nauty_dense().unwrap()
+    }
+}
+
 impl<N, E, Ix: IndexType> TryIntoCanonTraces for UnGraph<N, E, Ix>
 where
     N: Ord,
@@ -291,6 +344,50 @@ mod tests {
             debug!("Canonical graph (from initial): {g:#?}");
             assert!(is_isomorphic(&g, &gg));
             let gg = gg.into_canon_nauty_sparse();
+            debug!("Canonical graph (from randomised): {gg:#?}");
+            assert!(is_isomorphic(&g, &gg));
+            assert!(g.is_identical(&gg));
+        }
+    }
+
+    #[test]
+    fn random_canon_nauty_dense_undirected() {
+        log_init();
+
+        let mut rng = Xoshiro256Plus::seed_from_u64(0);
+        let graphs = GraphIter::<Undirected>::default();
+
+        for g in graphs.take(1000) {
+            debug!("Initial graph: {g:#?}");
+            let gg = randomize_labels(g.clone(), &mut rng);
+            debug!("Randomised graph: {gg:#?}");
+            assert!(is_isomorphic(&g, &gg));
+            let g = g.into_canon_nauty_dense();
+            debug!("Canonical graph (from initial): {g:#?}");
+            assert!(is_isomorphic(&g, &gg));
+            let gg = gg.into_canon_nauty_dense();
+            debug!("Canonical graph (from randomised): {gg:#?}");
+            assert!(is_isomorphic(&g, &gg));
+            assert!(g.is_identical(&gg));
+        }
+    }
+
+    #[test]
+    fn random_canon_nauty_dense_directed() {
+        log_init();
+
+        let mut rng = Xoshiro256Plus::seed_from_u64(0);
+        let graphs = GraphIter::<Directed>::default();
+
+        for g in graphs.take(700) {
+            debug!("Initial graph: {g:#?}");
+            let gg = randomize_labels(g.clone(), &mut rng);
+            debug!("Randomised graph: {gg:#?}");
+            assert!(is_isomorphic(&g, &gg));
+            let g = g.into_canon_nauty_dense();
+            debug!("Canonical graph (from initial): {g:#?}");
+            assert!(is_isomorphic(&g, &gg));
+            let gg = gg.into_canon_nauty_dense();
             debug!("Canonical graph (from randomised): {gg:#?}");
             assert!(is_isomorphic(&g, &gg));
             assert!(g.is_identical(&gg));

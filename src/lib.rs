@@ -39,7 +39,7 @@ mod autom;
 pub mod canon;
 mod cmp;
 pub mod prelude;
-mod sparse_graph;
+mod graph;
 
 pub use canon::{IntoCanon, IntoCanonNautySparse, TryIntoCanonTraces};
 pub use cmp::IsIdentical;

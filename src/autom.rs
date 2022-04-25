@@ -2,7 +2,7 @@ use std::cmp::Ord;
 use std::convert::{From, Infallible};
 use std::hash::Hash;
 
-use crate::sparse_graph::SparseGraph;
+use crate::graph::SparseGraph;
 
 use nauty_Traces_sys::{
     optionblk, sparsenauty, statsblk, Traces, TracesOptions, TracesStats,

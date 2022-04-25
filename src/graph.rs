@@ -6,7 +6,14 @@ use std::os::raw::c_int;
 
 use ahash::AHashMap;
 use itertools::izip;
-use nauty_Traces_sys::{size_t, SparseGraph as NautySparse};
+use nauty_Traces_sys::{
+    empty_graph,
+    graph,
+    size_t,
+    ADDONEARC,
+    SETWORDSNEEDED,
+    SparseGraph as NautySparse
+};
 use petgraph::{
     graph::{Graph, IndexType},
     visit::EdgeRef,
@@ -21,11 +28,30 @@ pub(crate) struct SparseGraph<N, E, D> {
     dir: PhantomData<D>,
 }
 
+#[derive(Debug, Default, Clone)]
+pub(crate) struct DenseGraph<N, E, D> {
+    pub(crate) n: usize,
+    pub(crate) m: usize,
+    pub(crate) g: Vec<graph>,
+    pub(crate) nodes: Nodes<N>,
+    edges: AHashMap<(usize, usize), Vec<E>>,
+    dir: PhantomData<D>,
+}
+
 #[derive(Debug, Default, Clone, Hash)]
 pub(crate) struct Nodes<N> {
     pub(crate) lab: Vec<c_int>,
     pub(crate) ptn: Vec<c_int>,
     pub(crate) weights: Vec<N>,
+}
+
+#[derive(Debug, Default, Clone)]
+struct RawGraphData <N, E, D> {
+    adj: Vec<Vec<c_int>>,
+    nodes: Nodes<N>,
+    edges: AHashMap<(usize, usize), Vec<E>>,
+    num_nauty_edges: usize,
+    dir: PhantomData<D>,
 }
 
 fn relabel_to_contiguous_node_weights<N: Ord>(
@@ -58,7 +84,7 @@ fn apply_perm<T>(slice: &mut [T], mut new_pos: Vec<usize>) {
     }
 }
 
-impl<N, E, Ty, Ix> From<Graph<N, E, Ty, Ix>> for SparseGraph<(N, Vec<E>), E, Ty>
+impl<N, E, Ty, Ix> From<Graph<N, E, Ty, Ix>> for RawGraphData<(N, Vec<E>), E, Ty>
 where
     Ty: EdgeType,
     Ix: IndexType,
@@ -191,20 +217,7 @@ where
                 add_edge(&mut adj, source, target, is_directed);
             }
         }
-
-        let mut g = NautySparse::new(num_nauty_vertices, num_nauty_edges);
-        let mut vpos = 0;
-        for (adj, d, v) in izip!(adj, &mut g.d, &mut g.v) {
-            *d = adj.len() as c_int;
-            *v = vpos;
-            let start = vpos as usize;
-            let end = start + *d as usize;
-            g.e[start..end].copy_from_slice(&adj);
-            vpos += *d as size_t
-        }
-        debug_assert!(g.v.len() >= node_weights.len());
-
-        let mut ptn = vec![1; g.v.len()];
+        let mut ptn = vec![1; num_nauty_vertices];
         for (ptn, wts) in izip!(&mut ptn, node_weights.windows(2)) {
             if wts[1] > wts[0] {
                 *ptn = 0;
@@ -216,18 +229,161 @@ where
                 ptn[i - 1] = 0;
             }
         }
-        let lab = (0..g.v.len() as i32).collect();
+        let lab = (0..num_nauty_vertices as i32).collect();
         let nodes = Nodes {
             weights: node_weights,
             lab,
             ptn,
         };
         Self {
-            g,
+            adj,
             edges: edge_weights,
+            num_nauty_edges,
             nodes,
             dir: PhantomData,
         }
+    }
+}
+
+impl<N, E, Ty> From<RawGraphData<N, E, Ty>> for SparseGraph<N, E, Ty>
+where
+    Ty: EdgeType,
+    N: Ord,
+    E: Hash + Ord,
+{
+    fn from(g: RawGraphData<N, E, Ty>) -> Self {
+        let adj = g.adj;
+        let mut sg = NautySparse::new(adj.len(), g.num_nauty_edges);
+        let mut vpos = 0;
+        for (adj, d, v) in izip!(adj, &mut sg.d, &mut sg.v) {
+            *d = adj.len() as c_int;
+            *v = vpos;
+            let start = vpos as usize;
+            let end = start + *d as usize;
+            sg.e[start..end].copy_from_slice(&adj);
+            vpos += *d as size_t
+        }
+        debug_assert!(sg.v.len() >= g.nodes.weights.len());
+
+        Self {
+            g: sg,
+            edges: g.edges,
+            nodes: g.nodes,
+            dir: PhantomData,
+        }
+    }
+}
+
+impl<N, E, Ty, Ix> From<Graph<N, E, Ty, Ix>> for SparseGraph<(N, Vec<E>), E, Ty>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+    N: Ord,
+    E: Hash + Ord,
+{
+    fn from(g: Graph<N, E, Ty, Ix>) -> Self {
+        let g: RawGraphData<_, _, _> = g.into();
+        g.into()
+    }
+}
+
+impl<N, E, Ty> From<RawGraphData<N, E, Ty>> for DenseGraph<N, E, Ty>
+where
+    Ty: EdgeType,
+    N: Ord,
+    E: Hash + Ord,
+{
+    fn from(g: RawGraphData<N, E, Ty>) -> Self {
+        let adj = g.adj;
+        let n = adj.len();
+        let m = SETWORDSNEEDED(n);
+        let mut dg = empty_graph(m, n);
+        for (source, adj) in adj.into_iter().enumerate() {
+            for target in adj {
+                ADDONEARC(&mut dg, source, target as usize, m);
+            }
+        }
+
+        Self {
+            n,
+            m,
+            g: dg,
+            edges: g.edges,
+            nodes: g.nodes,
+            dir: PhantomData,
+        }
+    }
+}
+
+impl<N, E, Ty, Ix> From<Graph<N, E, Ty, Ix>> for DenseGraph<(N, Vec<E>), E, Ty>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+    N: Ord,
+    E: Hash + Ord,
+{
+    fn from(g: Graph<N, E, Ty, Ix>) -> Self {
+        let g: RawGraphData<_, _, _> = g.into();
+        g.into()
+    }
+}
+
+fn inv_perm(perm: &[c_int]) -> Vec<usize> {
+    let mut relabel = vec![0; perm.len()];
+    for (new, &old) in perm.iter().enumerate() {
+        relabel[old as usize] = new;
+    }
+    relabel
+}
+
+//TODO: code duplication
+impl<N, E, Ty, Ix> From<DenseGraph<(N, Vec<E>), E, Ty>> for Graph<N, E, Ty, Ix>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+    E: Ord,
+{
+    fn from(g: DenseGraph<(N, Vec<E>), E, Ty>) -> Self {
+        // TODO: check if precalculating the number of edges helps
+        let mut res = Graph::with_capacity(g.nodes.weights.len(), 0);
+        let relabel = inv_perm(&g.nodes.lab);
+        let mut edges = Vec::new();
+        let is_directed = Ty::is_directed();
+
+        // nodes + self-loops
+        let mut node_weights =
+            Vec::from_iter(izip!(relabel.iter().copied(), g.nodes.weights));
+        node_weights.sort_unstable_by_key(|e| e.0);
+        for (n, i) in node_weights.iter().map(|(i, _w)| i).enumerate() {
+            debug_assert_eq!(n, *i as usize)
+        }
+        for (_, (w, loops)) in node_weights {
+            for w in loops {
+                edges.push((res.node_count(), res.node_count(), w))
+            }
+            res.add_node(w);
+        }
+
+        // edges
+        for ((source, target), weights) in g.edges.into_iter() {
+            let mut source = relabel[source as usize];
+            let mut target = relabel[target as usize];
+            if !is_directed && source > target {
+                std::mem::swap(&mut source, &mut target);
+            }
+            for w in weights {
+                edges.push((source, target, w));
+            }
+        }
+        edges.sort_unstable();
+        for (source, target, weight) in edges {
+            use petgraph::visit::NodeIndexable;
+            let source = res.from_index(source as usize);
+            let target = res.from_index(target as usize);
+            res.add_edge(source, target, weight);
+        }
+
+        res
     }
 }
 
@@ -251,11 +407,7 @@ where
         } + g.nodes.weights.iter().map(|(_, loops)| loops.len()).sum::<usize>();
         let mut res = Graph::with_capacity(g.nodes.weights.len(), nedges);
 
-        // find relabelling from `lab`
-        let mut relabel = vec![0; g.nodes.lab.len()];
-        for (new, old) in g.nodes.lab.into_iter().enumerate() {
-            relabel[old as usize] = new;
-        }
+        let relabel = inv_perm(&g.nodes.lab);
 
         let mut edges = Vec::new();
 
@@ -343,7 +495,7 @@ mod tests {
         let _ = env_logger::builder().is_test(true).try_init();
     }
 
-    fn tst_conv<N, E, Ty, Ix>(g: Graph<N, E, Ty, Ix>)
+    fn tst_conv_sparse<N, E, Ty, Ix>(g: Graph<N, E, Ty, Ix>)
     where
         N: Clone + Debug + Ord,
         E: Clone + Debug + Ord + Hash,
@@ -358,20 +510,35 @@ mod tests {
         assert!(is_isomorphic(&g, &gg));
     }
 
+    fn tst_conv_dense<N, E, Ty, Ix>(g: Graph<N, E, Ty, Ix>)
+    where
+        N: Clone + Debug + Ord,
+        E: Clone + Debug + Ord + Hash,
+        Ty: Debug + EdgeType,
+        Ix: IndexType,
+    {
+        debug!("Initial graph: {g:#?}");
+        let s = DenseGraph::from(g.clone());
+        debug!("Nauty graph: {s:#?}");
+        let gg: Graph<N, E, Ty, Ix> = s.into();
+        debug!("Final graph: {gg:#?}");
+        assert!(is_isomorphic(&g, &gg));
+    }
+
     #[test]
-    fn simple_conversion() {
+    fn simple_conversion_sparse() {
         log_init();
 
-        tst_conv(Graph::<(), (), _>::new_undirected());
-        tst_conv(UnGraph::<(), ()>::from_edges([(0, 1), (2, 0)]));
-        tst_conv(UnGraph::<(), i32>::from_edges([(0, 1, -1), (2, 0, 1)]));
-        tst_conv(DiGraph::<(), ()>::from_edges([
+        tst_conv_sparse(Graph::<(), (), _>::new_undirected());
+        tst_conv_sparse(UnGraph::<(), ()>::from_edges([(0, 1), (2, 0)]));
+        tst_conv_sparse(UnGraph::<(), i32>::from_edges([(0, 1, -1), (2, 0, 1)]));
+        tst_conv_sparse(DiGraph::<(), ()>::from_edges([
             (0, 1),
             (1, 1),
             (0, 2),
             (2, 0),
         ]));
-        tst_conv(DiGraph::<(), u32>::from_edges([
+        tst_conv_sparse(DiGraph::<(), u32>::from_edges([
             (0, 1, 0),
             (1, 1, 0),
             (0, 2, 0),
@@ -380,18 +547,55 @@ mod tests {
     }
 
     #[test]
-    fn random_conversion_undirected() {
+    fn simple_conversion_dense() {
+        log_init();
+
+        tst_conv_dense(Graph::<(), (), _>::new_undirected());
+        tst_conv_dense(UnGraph::<(), ()>::from_edges([(0, 1), (2, 0)]));
+        tst_conv_dense(UnGraph::<(), i32>::from_edges([(0, 1, -1), (2, 0, 1)]));
+        tst_conv_dense(DiGraph::<(), ()>::from_edges([
+            (0, 1),
+            (1, 1),
+            (0, 2),
+            (2, 0),
+        ]));
+        tst_conv_dense(DiGraph::<(), u32>::from_edges([
+            (0, 1, 0),
+            (1, 1, 0),
+            (0, 2, 0),
+            (2, 0, 1),
+        ]));
+    }
+
+    #[test]
+    fn random_conversion_sparse_undirected() {
         log_init();
         for g in GraphIter::<Undirected>::default().take(1000) {
-            tst_conv(g);
+            tst_conv_sparse(g);
         }
     }
 
     #[test]
-    fn random_conversion_directed() {
+    fn random_conversion_sparse_directed() {
         log_init();
         for g in GraphIter::<Directed>::default().take(700) {
-            tst_conv(g);
+            tst_conv_sparse(g);
+        }
+    }
+
+    #[test]
+    fn random_conversion_dense_undirected() {
+        log_init();
+        for g in GraphIter::<Undirected>::default().take(1000) {
+            tst_conv_dense(g);
+        }
+    }
+
+    #[test]
+    fn random_conversion_dense_directed() {
+        log_init();
+        for g in GraphIter::<Directed>::default().take(700) {
+            tst_conv_dense(g);
         }
     }
 }
