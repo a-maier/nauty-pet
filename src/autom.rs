@@ -1,13 +1,20 @@
 use std::cmp::Ord;
-use std::convert::{From, Infallible};
+use std::convert::From;
+#[cfg(feature = "libc")]
+use std::convert::Infallible;
 use std::hash::Hash;
 
 use crate::error::NautyError;
-use crate::graph::{DenseGraph, SparseGraph};
+use crate::graph::DenseGraph;
+#[cfg(feature = "libc")]
+use crate::graph::SparseGraph;
 
 use nauty_Traces_sys::{
-    densenauty, MTOOBIG, NTOOBIG, optionblk, sparsenauty, statsblk,
-    Traces, TracesOptions, TracesStats, FALSE, TRUE,
+    densenauty, optionblk, statsblk, MTOOBIG, NTOOBIG, FALSE, TRUE
+};
+#[cfg(feature = "libc")]
+use nauty_Traces_sys::{
+    sparsenauty, Traces, TracesOptions, TracesStats,
 };
 use petgraph::{
     graph::{Graph, IndexType},
@@ -33,6 +40,7 @@ impl Autom {
     }
 }
 
+#[cfg(feature = "libc")]
 impl From<TracesStats> for Autom {
     fn from(o: TracesStats) -> Self {
         Self {
@@ -63,6 +71,7 @@ pub trait TryIntoAutom {
 }
 
 /// Analyse a graph's automorphism group using sparse nauty
+#[cfg(feature = "libc")]
 pub trait TryIntoAutomNautySparse {
     type Error;
 
@@ -77,6 +86,7 @@ pub trait TryIntoAutomNautyDense {
 }
 
 /// Analyse a graph's automorphism group using Traces
+#[cfg(feature = "libc")]
 pub trait TryIntoAutomTraces {
     type Error;
 
@@ -90,13 +100,14 @@ where
     Ty: EdgeType,
     Ix: IndexType,
 {
-    type Error = Infallible;
+    type Error = NautyError;
 
     fn try_into_autom(self) -> Result<Autom, Self::Error> {
-        self.try_into_autom_traces()
+        self.try_into_autom_nauty_dense()
     }
 }
 
+#[cfg(feature = "libc")]
 impl<N, E, Ty, Ix> TryIntoAutomNautySparse for Graph<N, E, Ty, Ix>
 where
     N: Ord,
@@ -180,6 +191,7 @@ where
     }
 }
 
+#[cfg(feature = "libc")]
 impl<N, E, Ty, Ix> TryIntoAutomTraces for Graph<N, E, Ty, Ix>
 where
     N: Ord,

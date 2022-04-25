@@ -42,7 +42,9 @@ mod cmp;
 pub mod prelude;
 mod graph;
 
-pub use canon::{IntoCanon, IntoCanonNautySparse, TryIntoCanonTraces};
+pub use canon::IntoCanon;
+#[cfg(feature = "libc")]
+pub use canon::{IntoCanonNautySparse, TryIntoCanonTraces};
 pub use cmp::IsIdentical;
 
 #[cfg(test)]
