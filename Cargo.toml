@@ -27,7 +27,7 @@ log = "0.4"
 rand = "0.8"
 rand_xoshiro = "0.6"
 testing = { path = "testing" }
-
+nauty-pet = { path = ".", features = ["libc"] }
 
 [[bench]]
 name = "benchmark"
