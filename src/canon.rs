@@ -6,24 +6,22 @@ use crate::nauty_graph::SparseGraph;
 use std::cmp::Ord;
 #[cfg(feature = "libc")]
 use std::convert::Infallible;
-use std::hash::Hash;
 use std::fmt::Debug;
+use std::hash::Hash;
 
 use nauty_Traces_sys::{
-    densenauty, empty_graph, optionblk, statsblk, MTOOBIG, NTOOBIG,
-    FALSE, TRUE
+    densenauty, empty_graph, optionblk, statsblk, FALSE, MTOOBIG, NTOOBIG, TRUE,
 };
 #[cfg(feature = "libc")]
 use nauty_Traces_sys::{
-    SG_FREE, sparsegraph, sparsenauty, Traces, TracesOptions,
-    TracesStats,
-};
-use petgraph::{
-    graph::{IndexType, Graph},
-    EdgeType,
+    sparsegraph, sparsenauty, Traces, TracesOptions, TracesStats, SG_FREE,
 };
 #[cfg(feature = "libc")]
 use petgraph::graph::UnGraph;
+use petgraph::{
+    graph::{Graph, IndexType},
+    EdgeType,
+};
 
 /// Find the canonical labelling for a graph
 pub trait IntoCanon {
@@ -131,11 +129,7 @@ where
         let mut options = optionblk::default_sparse();
         options.getcanon = TRUE;
         options.defaultptn = FALSE;
-        options.digraph = if self.is_directed() {
-            TRUE
-        } else {
-            FALSE
-        };
+        options.digraph = if self.is_directed() { TRUE } else { FALSE };
         let mut stats = statsblk::default();
         let mut sg = SparseGraph::from(self);
         let mut orbits = vec![0; sg.g.v.len()];
@@ -177,19 +171,17 @@ where
     type Error = NautyError;
 
     fn try_into_canon_nauty_dense(self) -> Result<Self, Self::Error> {
-        use NautyError::*;
         use ::std::os::raw::c_int;
+        use NautyError::*;
 
         if self.node_count() == 0 {
             return Ok(self);
         }
-        let mut options = optionblk::default();
-        options.getcanon = TRUE;
-        options.defaultptn = FALSE;
-        options.digraph = if self.is_directed() {
-            TRUE
-        } else {
-            FALSE
+        let mut options = optionblk {
+            getcanon: TRUE,
+            defaultptn: FALSE,
+            digraph: if self.is_directed() { TRUE } else { FALSE },
+            ..Default::default()
         };
         let mut stats = statsblk::default();
         let mut dg = DenseGraph::from(self);
@@ -212,7 +204,7 @@ where
             0 => Ok(dg.into()),
             MTOOBIG => Err(MTooBig),
             NTOOBIG => Err(NTooBig),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }
@@ -287,7 +279,7 @@ mod tests {
         Directed, Undirected,
     };
     use rand::prelude::*;
-    use testing::{GraphIter, randomize_labels};
+    use testing::{randomize_labels, GraphIter};
 
     use rand_xoshiro::Xoshiro256Plus;
 

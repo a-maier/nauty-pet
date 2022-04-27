@@ -10,12 +10,10 @@ use crate::nauty_graph::DenseGraph;
 use crate::nauty_graph::SparseGraph;
 
 use nauty_Traces_sys::{
-    densenauty, optionblk, statsblk, MTOOBIG, NTOOBIG, FALSE, TRUE
+    densenauty, optionblk, statsblk, FALSE, MTOOBIG, NTOOBIG, TRUE,
 };
 #[cfg(feature = "libc")]
-use nauty_Traces_sys::{
-    sparsenauty, Traces, TracesOptions, TracesStats,
-};
+use nauty_Traces_sys::{sparsenauty, Traces, TracesOptions, TracesStats};
 use petgraph::{
     graph::{Graph, IndexType},
     EdgeType,
@@ -125,11 +123,7 @@ where
         let mut options = optionblk::default_sparse();
         options.getcanon = FALSE;
         options.defaultptn = FALSE;
-        options.digraph = if self.is_directed() {
-            TRUE
-        } else {
-            FALSE
-        };
+        options.digraph = if self.is_directed() { TRUE } else { FALSE };
         let mut stats = statsblk::default();
         let mut sg = SparseGraph::from(self);
         let mut orbits = vec![0; sg.g.v.len()];
@@ -159,16 +153,14 @@ where
     type Error = NautyError;
 
     fn try_into_autom_nauty_dense(self) -> Result<Autom, Self::Error> {
-        use NautyError::*;
         use ::std::os::raw::c_int;
+        use NautyError::*;
 
-        let mut options = optionblk::default();
-        options.getcanon = FALSE;
-        options.defaultptn = FALSE;
-        options.digraph = if self.is_directed() {
-            TRUE
-        } else {
-            FALSE
+        let mut options = optionblk {
+            getcanon: FALSE,
+            defaultptn: FALSE,
+            digraph: if self.is_directed() { TRUE } else { FALSE },
+            ..Default::default()
         };
         let mut stats = statsblk::default();
         let mut dg = DenseGraph::from(self);
@@ -190,7 +182,7 @@ where
             0 => Ok(stats.into()),
             MTOOBIG => Err(MTooBig),
             NTOOBIG => Err(NTooBig),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }

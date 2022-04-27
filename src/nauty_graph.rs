@@ -6,17 +6,9 @@ use std::os::raw::c_int;
 
 use ahash::AHashMap;
 use itertools::izip;
-use nauty_Traces_sys::{
-    empty_graph,
-    graph,
-    ADDONEARC,
-    SETWORDSNEEDED,
-};
+use nauty_Traces_sys::{empty_graph, graph, ADDONEARC, SETWORDSNEEDED};
 #[cfg(feature = "libc")]
-use nauty_Traces_sys::{
-    size_t,
-    SparseGraph as NautySparse
-};
+use nauty_Traces_sys::{size_t, SparseGraph as NautySparse};
 
 use petgraph::{
     graph::{Graph, IndexType},
@@ -51,7 +43,7 @@ pub(crate) struct Nodes<N> {
 }
 
 #[derive(Debug, Default, Clone)]
-struct RawGraphData <N, E, D> {
+struct RawGraphData<N, E, D> {
     adj: Vec<Vec<c_int>>,
     nodes: Nodes<N>,
     edges: AHashMap<(usize, usize), Vec<E>>,
@@ -60,9 +52,7 @@ struct RawGraphData <N, E, D> {
     dir: PhantomData<D>,
 }
 
-fn relabel_to_contiguous_node_weights<N: Ord>(
-    nodes: &mut[N],
-) -> Vec<usize> {
+fn relabel_to_contiguous_node_weights<N: Ord>(nodes: &mut [N]) -> Vec<usize> {
     let mut new_ord = Vec::from_iter(0..nodes.len());
     new_ord.sort_unstable_by(|&i, &j| nodes[i].cmp(&nodes[j]));
     let mut renumber = vec![0; new_ord.len()];
@@ -90,7 +80,8 @@ fn apply_perm<T>(slice: &mut [T], mut new_pos: Vec<usize>) {
     }
 }
 
-impl<N, E, Ty, Ix> From<Graph<N, E, Ty, Ix>> for RawGraphData<(N, Vec<E>), E, Ty>
+impl<N, E, Ty, Ix> From<Graph<N, E, Ty, Ix>>
+    for RawGraphData<(N, Vec<E>), E, Ty>
 where
     Ty: EdgeType,
     Ix: IndexType,
@@ -105,11 +96,8 @@ where
                 .map(|e| (g.to_index(e.source()), g.to_index(e.target()))),
         );
         let (nodes, e) = g.into_nodes_edges();
-        let mut node_weights = Vec::from_iter(
-            nodes.into_iter().map(
-                |n| (n.weight, Vec::new())
-            )
-        );
+        let mut node_weights =
+            Vec::from_iter(nodes.into_iter().map(|n| (n.weight, Vec::new())));
 
         // edge weights
         // we combine multiple edges into a single one with an
@@ -129,15 +117,16 @@ where
             v.sort_unstable();
         }
         let relabel = relabel_to_contiguous_node_weights(&mut node_weights);
-        let edge_weights: AHashMap<_, _> = edge_weights.into_iter().map(
-            |(e, wt)| {
+        let edge_weights: AHashMap<_, _> = edge_weights
+            .into_iter()
+            .map(|(e, wt)| {
                 let mut e = (relabel[e.0], relabel[e.1]);
                 if !is_directed && e.0 > e.1 {
                     std::mem::swap(&mut e.0, &mut e.1)
                 }
                 (e, wt)
-            }
-        ).collect();
+            })
+            .collect();
 
         // the edge weight that appears most often is taken to be the default
         // for all other edge weights we introduce auxiliary vertices
@@ -481,7 +470,10 @@ mod tests {
 
         tst_conv_sparse(Graph::<(), (), _>::new_undirected());
         tst_conv_sparse(UnGraph::<(), ()>::from_edges([(0, 1), (2, 0)]));
-        tst_conv_sparse(UnGraph::<(), i32>::from_edges([(0, 1, -1), (2, 0, 1)]));
+        tst_conv_sparse(UnGraph::<(), i32>::from_edges([
+            (0, 1, -1),
+            (2, 0, 1),
+        ]));
         tst_conv_sparse(DiGraph::<(), ()>::from_edges([
             (0, 1),
             (1, 1),

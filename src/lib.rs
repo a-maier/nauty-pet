@@ -47,11 +47,11 @@
 //! ```
 mod autom;
 pub mod canon;
-pub mod error;
 mod cmp;
-pub mod prelude;
+pub mod error;
 pub mod graph;
 mod nauty_graph;
+pub mod prelude;
 
 pub use canon::IntoCanon;
 #[cfg(feature = "libc")]

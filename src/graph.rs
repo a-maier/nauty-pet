@@ -1,30 +1,25 @@
 use std::cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd};
 use std::convert::From;
-use std::ops::Index;
 use std::hash::{Hash, Hasher};
+use std::ops::Index;
 
 use crate::{IntoCanon, IsIdentical};
 
 use petgraph::{
     data::DataMap,
-    Directed, Direction,
     graph::{
-        DefaultIx, Edge, EdgeIndex, EdgeIndices, EdgeReference,
-        EdgeReferences, Edges, EdgesConnecting, Externals, Graph,
-        IndexType, Neighbors, Node, NodeIndex, NodeIndices,
-        NodeReferences,
+        DefaultIx, Edge, EdgeIndex, EdgeIndices, EdgeReference, EdgeReferences,
+        Edges, EdgesConnecting, Externals, Graph, IndexType, Neighbors, Node,
+        NodeIndex, NodeIndices, NodeReferences,
     },
-    EdgeType,
-    IntoWeightedEdge,
     stable_graph::StableGraph,
-    Undirected,
     visit::{
-        Data, EdgeCount, EdgeIndexable, EdgeRef, GetAdjacencyMatrix,
-        GraphBase, GraphProp, IntoEdges, IntoEdgeReferences,
-        IntoEdgesDirected, IntoNeighbors, IntoNeighborsDirected,
-        IntoNodeIdentifiers, IntoNodeReferences, NodeCount,
-        NodeIndexable,
+        Data, EdgeCount, EdgeIndexable, EdgeRef, GetAdjacencyMatrix, GraphBase,
+        GraphProp, IntoEdgeReferences, IntoEdges, IntoEdgesDirected,
+        IntoNeighbors, IntoNeighborsDirected, IntoNodeIdentifiers,
+        IntoNodeReferences, NodeCount, NodeIndexable,
     },
+    Directed, Direction, EdgeType, IntoWeightedEdge, Undirected,
 };
 
 pub type CanonDiGraph<N, E, Ix> = CanonGraph<N, E, Directed, Ix>;
@@ -59,13 +54,13 @@ pub type CanonUnGraph<N, E, Ix> = CanonGraph<N, E, Undirected, Ix>;
 #[cfg_attr(feature = "serde-1", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, Default)]
 pub struct CanonGraph<N, E, Ty: EdgeType = Directed, Ix: IndexType = DefaultIx>(
-    Graph<N, E, Ty, Ix>
+    Graph<N, E, Ty, Ix>,
 );
 
 impl<N, E, Ty, Ix> CanonGraph<N, E, Ty, Ix>
 where
     Ty: EdgeType,
-    Ix: IndexType
+    Ix: IndexType,
 {
     pub fn node_count(&self) -> usize {
         self.0.node_count()
@@ -98,7 +93,7 @@ where
     pub fn neighbors_directed(
         &self,
         a: NodeIndex<Ix>,
-        dir: Direction
+        dir: Direction,
     ) -> Neighbors<'_, E, Ix> {
         self.0.neighbors_directed(a, dir)
     }
@@ -110,17 +105,14 @@ where
         self.0.neighbors_undirected(a)
     }
 
-    pub fn edges(
-        &self,
-        a: NodeIndex<Ix>,
-    ) -> Edges<'_, E, Ty, Ix> {
+    pub fn edges(&self, a: NodeIndex<Ix>) -> Edges<'_, E, Ty, Ix> {
         self.0.edges(a)
     }
 
     pub fn edges_directed(
         &self,
         a: NodeIndex<Ix>,
-        dir: Direction
+        dir: Direction,
     ) -> Edges<'_, E, Ty, Ix> {
         self.0.edges_directed(a, dir)
     }
@@ -133,11 +125,7 @@ where
         self.0.edges_connecting(a, b)
     }
 
-    pub fn contains_edge(
-        &self,
-        a: NodeIndex<Ix>,
-        b: NodeIndex<Ix>,
-    ) -> bool {
+    pub fn contains_edge(&self, a: NodeIndex<Ix>, b: NodeIndex<Ix>) -> bool {
         self.0.contains_edge(a, b)
     }
 
@@ -149,67 +137,48 @@ where
         self.0.find_edge_undirected(a, b)
     }
 
-    pub fn externals(
-        &self,
-        dir: Direction,
-    ) -> Externals<'_, N, Ty, Ix> {
+    pub fn externals(&self, dir: Direction) -> Externals<'_, N, Ty, Ix> {
         self.0.externals(dir)
     }
 
-    pub fn node_indices(
-        &self
-    ) -> NodeIndices<Ix> {
+    pub fn node_indices(&self) -> NodeIndices<Ix> {
         self.0.node_indices()
     }
 
     // TODO: return `NodeWeights<'_, N, Ix>`, but it's private in petgraph 0.6.0
-    pub fn node_weights(
-        &self
-    ) -> impl Iterator<Item = &N> {
+    pub fn node_weights(&self) -> impl Iterator<Item = &N> {
         self.0.node_weights()
     }
 
-    pub fn edge_indices(
-        &self
-    ) -> EdgeIndices<Ix> {
+    pub fn edge_indices(&self) -> EdgeIndices<Ix> {
         self.0.edge_indices()
     }
 
-    pub fn edge_references(
-        &self
-    ) -> EdgeReferences<'_, E, Ix> {
+    pub fn edge_references(&self) -> EdgeReferences<'_, E, Ix> {
         self.0.edge_references()
     }
 
     // TODO: return `EdgeWeights<'_, E, Ix>`, but it's private in petgraph 0.6.0
-    pub fn edge_weights(
-        &self
-    ) -> impl Iterator<Item = &E> {
+    pub fn edge_weights(&self) -> impl Iterator<Item = &E> {
         self.0.edge_weights()
     }
 
-    pub fn raw_nodes(
-        &self
-    ) -> &[Node<N, Ix>] {
+    pub fn raw_nodes(&self) -> &[Node<N, Ix>] {
         self.0.raw_nodes()
     }
 
-    pub fn raw_edges(
-        &self
-    ) -> &[Edge<E, Ix>] {
+    pub fn raw_edges(&self) -> &[Edge<E, Ix>] {
         self.0.raw_edges()
     }
 
-    pub fn into_nodes_edges(
-        self
-    ) -> (Vec<Node<N, Ix>>, Vec<Edge<E, Ix>>) {
+    pub fn into_nodes_edges(self) -> (Vec<Node<N, Ix>>, Vec<Edge<E, Ix>>) {
         self.0.into_nodes_edges()
     }
 
     pub fn next_edge(
         &self,
         e: EdgeIndex<Ix>,
-        dir: Direction
+        dir: Direction,
     ) -> Option<EdgeIndex<Ix>> {
         self.0.next_edge(e, dir)
     }
@@ -232,10 +201,9 @@ where
         <I::Item as IntoWeightedEdge<E>>::NodeId: Into<NodeIndex<Ix>>,
         N: Default,
     {
-        Self( Graph::from_edges(iterable).into_canon() )
+        Self(Graph::from_edges(iterable).into_canon())
     }
 }
-
 
 impl<N, E, Ty, Ix> From<Graph<N, E, Ty, Ix>> for CanonGraph<N, E, Ty, Ix>
 where
@@ -244,7 +212,7 @@ where
     Ix: IndexType,
 {
     fn from(g: Graph<N, E, Ty, Ix>) -> Self {
-        Self ( g.into_canon() )
+        Self(g.into_canon())
     }
 }
 
@@ -271,22 +239,24 @@ where
 
 impl<N, E, Ty, Ix> DataMap for CanonGraph<N, E, Ty, Ix>
 where
-    CanonGraph<N, E, Ty, Ix>: GraphBase<NodeId = NodeIndex<Ix>, EdgeId = EdgeIndex<Ix>>,
+    CanonGraph<N, E, Ty, Ix>:
+        GraphBase<NodeId = NodeIndex<Ix>, EdgeId = EdgeIndex<Ix>>,
     CanonGraph<N, E, Ty, Ix>: Data<NodeWeight = N, EdgeWeight = E>,
     Ty: EdgeType,
     Ix: IndexType,
 {
     fn node_weight(&self, id: Self::NodeId) -> Option<&Self::NodeWeight> {
-        Self::node_weight(&self, id)
+        Self::node_weight(self, id)
     }
     fn edge_weight(&self, id: Self::EdgeId) -> Option<&Self::EdgeWeight> {
-        Self::edge_weight(&self, id)
+        Self::edge_weight(self, id)
     }
 }
 
 impl<N, E, Ty, Ix> EdgeCount for CanonGraph<N, E, Ty, Ix>
 where
-    CanonGraph<N, E, Ty, Ix>: GraphBase<NodeId = NodeIndex<Ix>, EdgeId = EdgeIndex<Ix>>,
+    CanonGraph<N, E, Ty, Ix>:
+        GraphBase<NodeId = NodeIndex<Ix>, EdgeId = EdgeIndex<Ix>>,
     Ty: EdgeType,
     Ix: IndexType,
 {
@@ -297,7 +267,8 @@ where
 
 impl<N, E, Ty, Ix> EdgeIndexable for CanonGraph<N, E, Ty, Ix>
 where
-    CanonGraph<N, E, Ty, Ix>: GraphBase<NodeId = NodeIndex<Ix>, EdgeId = EdgeIndex<Ix>>,
+    CanonGraph<N, E, Ty, Ix>:
+        GraphBase<NodeId = NodeIndex<Ix>, EdgeId = EdgeIndex<Ix>>,
     Ty: EdgeType,
     Ix: IndexType,
 {
@@ -317,7 +288,7 @@ where
 impl<N, E, Ty, Ix> From<CanonGraph<N, E, Ty, Ix>> for StableGraph<N, E, Ty, Ix>
 where
     Ty: EdgeType,
-    Ix: IndexType
+    Ix: IndexType,
 {
     fn from(g: CanonGraph<N, E, Ty, Ix>) -> Self {
         g.0.into()
@@ -328,11 +299,11 @@ impl<N, E, Ty, Ix> From<StableGraph<N, E, Ty, Ix>> for CanonGraph<N, E, Ty, Ix>
 where
     Graph<N, E, Ty, Ix>: IntoCanon,
     Ty: EdgeType,
-    Ix: IndexType
+    Ix: IndexType,
 {
     fn from(g: StableGraph<N, E, Ty, Ix>) -> Self {
         let g: Graph<_, _, _, _> = g.into();
-        Self ( g.into_canon() )
+        Self(g.into_canon())
     }
 }
 
@@ -340,11 +311,12 @@ impl<N, E, Ty, Ix> GetAdjacencyMatrix for CanonGraph<N, E, Ty, Ix>
 where
     Ty: EdgeType,
     Ix: IndexType,
-    CanonGraph<N, E, Ty, Ix>: GraphBase<NodeId = NodeIndex<Ix>, EdgeId = EdgeIndex<Ix>>,
-    Graph<N, E, Ty, Ix>: GraphBase<NodeId = NodeIndex<Ix>, EdgeId = EdgeIndex<Ix>>,
+    CanonGraph<N, E, Ty, Ix>:
+        GraphBase<NodeId = NodeIndex<Ix>, EdgeId = EdgeIndex<Ix>>,
+    Graph<N, E, Ty, Ix>:
+        GraphBase<NodeId = NodeIndex<Ix>, EdgeId = EdgeIndex<Ix>>,
     Graph<N, E, Ty, Ix>: GetAdjacencyMatrix,
 {
-
     type AdjMatrix = <Graph<N, E, Ty, Ix> as GetAdjacencyMatrix>::AdjMatrix;
 
     fn adjacency_matrix(&self) -> Self::AdjMatrix {
@@ -355,7 +327,7 @@ where
         &self,
         matrix: &Self::AdjMatrix,
         a: NodeIndex<Ix>,
-        b: NodeIndex<Ix>
+        b: NodeIndex<Ix>,
     ) -> bool {
         self.0.is_adjacent(matrix, a, b)
     }
@@ -364,7 +336,7 @@ where
 impl<N, E, Ty, Ix> GraphBase for CanonGraph<N, E, Ty, Ix>
 where
     Ty: EdgeType,
-    Ix: IndexType
+    Ix: IndexType,
 {
     type NodeId = NodeIndex<Ix>;
 
@@ -374,8 +346,8 @@ where
 impl<N, E, Ty, Ix> GraphProp for CanonGraph<N, E, Ty, Ix>
 where
     Ty: EdgeType,
-    Ix: IndexType, {
-
+    Ix: IndexType,
+{
     type EdgeType = Ty;
 
     fn is_directed(&self) -> bool {
@@ -395,7 +367,6 @@ where
     }
 }
 
-
 impl<N, E, Ty, Ix> Index<NodeIndex<Ix>> for CanonGraph<N, E, Ty, Ix>
 where
     Ty: EdgeType,
@@ -408,7 +379,8 @@ where
     }
 }
 
-impl<'a, N: 'a, E: 'a, Ty, Ix> IntoEdgeReferences for &'a CanonGraph<N, E, Ty, Ix>
+impl<'a, N: 'a, E: 'a, Ty, Ix> IntoEdgeReferences
+    for &'a CanonGraph<N, E, Ty, Ix>
 where
     Ty: EdgeType,
     Ix: IndexType,
@@ -440,7 +412,11 @@ where
 {
     type EdgesDirected = Edges<'a, E, Ty, Ix>;
 
-    fn edges_directed(self, a: Self::NodeId, dir: Direction) -> Self::EdgesDirected {
+    fn edges_directed(
+        self,
+        a: Self::NodeId,
+        dir: Direction,
+    ) -> Self::EdgesDirected {
         self.0.edges_directed(a, dir)
     }
 }
@@ -457,7 +433,8 @@ where
     }
 }
 
-impl<'a, N, E: 'a, Ty, Ix> IntoNeighborsDirected for &'a CanonGraph<N, E, Ty, Ix>
+impl<'a, N, E: 'a, Ty, Ix> IntoNeighborsDirected
+    for &'a CanonGraph<N, E, Ty, Ix>
 where
     Ty: EdgeType,
     Ix: IndexType,
@@ -467,7 +444,7 @@ where
     fn neighbors_directed(
         self,
         n: NodeIndex<Ix>,
-        d: Direction
+        d: Direction,
     ) -> Neighbors<'a, E, Ix> {
         self.neighbors_directed(n, d)
     }
@@ -537,9 +514,14 @@ where
         self.0.is_identical(&other.0)
     }
 }
-impl<N: Eq, E: Eq, Ty: EdgeType, Ix: IndexType> Eq for CanonGraph<N, E, Ty, Ix> { }
+impl<N: Eq, E: Eq, Ty: EdgeType, Ix: IndexType> Eq
+    for CanonGraph<N, E, Ty, Ix>
+{
+}
 
-impl<N: Hash, E: Hash, Ty: EdgeType, Ix: IndexType> Hash for CanonGraph<N, E, Ty, Ix> {
+impl<N: Hash, E: Hash, Ty: EdgeType, Ix: IndexType> Hash
+    for CanonGraph<N, E, Ty, Ix>
+{
     fn hash<H: Hasher>(&self, state: &mut H) {
         for w in self.0.node_weights() {
             w.hash(state)
@@ -553,16 +535,20 @@ impl<N: Hash, E: Hash, Ty: EdgeType, Ix: IndexType> Hash for CanonGraph<N, E, Ty
 }
 
 // Doesn't have to make much sense, just give a reproducible ordering
-impl<N: Ord, E: Ord, Ty: EdgeType, Ix: IndexType> Ord for CanonGraph<N, E, Ty, Ix> {
+impl<N: Ord, E: Ord, Ty: EdgeType, Ix: IndexType> Ord
+    for CanonGraph<N, E, Ty, Ix>
+{
     fn cmp(&self, other: &Self) -> Ordering {
         let cmp = self.0.node_weights().cmp(other.0.node_weights());
         if cmp == Ordering::Equal {
-            let my_edges = self.0.edge_references().map(
-                |e| (e.source(), e.target(), e.weight())
-            );
-            let other_edges = self.0.edge_references().map(
-                |e| (e.source(), e.target(), e.weight())
-            );
+            let my_edges = self
+                .0
+                .edge_references()
+                .map(|e| (e.source(), e.target(), e.weight()));
+            let other_edges = self
+                .0
+                .edge_references()
+                .map(|e| (e.source(), e.target(), e.weight()));
             my_edges.cmp(other_edges)
         } else {
             cmp
@@ -575,18 +561,20 @@ where
     N: PartialOrd,
     E: PartialOrd,
     Ty: EdgeType,
-    Ix: IndexType
+    Ix: IndexType,
 {
     // TODO: code duplication
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         let cmp = self.0.node_weights().partial_cmp(other.0.node_weights());
         if cmp == Some(Ordering::Equal) {
-            let my_edges = self.0.edge_references().map(
-                |e| (e.source(), e.target(), e.weight())
-            );
-            let other_edges = self.0.edge_references().map(
-                |e| (e.source(), e.target(), e.weight())
-            );
+            let my_edges = self
+                .0
+                .edge_references()
+                .map(|e| (e.source(), e.target(), e.weight()));
+            let other_edges = self
+                .0
+                .edge_references()
+                .map(|e| (e.source(), e.target(), e.weight()));
             my_edges.partial_cmp(other_edges)
         } else {
             cmp
@@ -601,8 +589,7 @@ mod tests {
     use log::debug;
     use rand::prelude::*;
     use rand_xoshiro::Xoshiro256Plus;
-    use testing::{GraphIter, randomize_labels};
-
+    use testing::{randomize_labels, GraphIter};
 
     fn log_init() {
         let _ = env_logger::builder().is_test(true).try_init();
