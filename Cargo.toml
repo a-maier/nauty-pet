@@ -19,6 +19,7 @@ thiserror = "1.0"
 
 [features]
 libc = ["nauty-Traces-sys/libc"]
+serde-1 = ["petgraph/serde-1"]
 
 [dev-dependencies]
 criterion = "0.3"

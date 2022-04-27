@@ -5,9 +5,9 @@ use std::convert::Infallible;
 use std::hash::Hash;
 
 use crate::error::NautyError;
-use crate::graph::DenseGraph;
+use crate::nauty_graph::DenseGraph;
 #[cfg(feature = "libc")]
-use crate::graph::SparseGraph;
+use crate::nauty_graph::SparseGraph;
 
 use nauty_Traces_sys::{
     densenauty, optionblk, statsblk, MTOOBIG, NTOOBIG, FALSE, TRUE

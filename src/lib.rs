@@ -23,9 +23,15 @@
 //! assert_eq!(automorphism_info.grpsize(), 2.);
 //!
 //! // The canonical forms are identical
-//! let c1 = g1.into_canon();
-//! let c2 = g2.into_canon();
-//! assert!(c1.is_identical(&c2))
+//! let c1 = g1.clone().into_canon();
+//! let c2 = g2.clone().into_canon();
+//! assert!(c1.is_identical(&c2));
+//!
+//! // Alternatively, we can use a dedicated `struct` for canonically
+//! // labelled graphs
+//! let c1 = CanonGraph::from(g1);
+//! let c2 = CanonGraph::from(g2);
+//! assert_eq!(c1, c2);
 //! ```
 //!
 //! # Features
@@ -44,7 +50,8 @@ pub mod canon;
 pub mod error;
 mod cmp;
 pub mod prelude;
-mod graph;
+pub mod graph;
+mod nauty_graph;
 
 pub use canon::IntoCanon;
 #[cfg(feature = "libc")]

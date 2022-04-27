@@ -1,7 +1,7 @@
 use crate::error::NautyError;
-use crate::graph::DenseGraph;
+use crate::nauty_graph::DenseGraph;
 #[cfg(feature = "libc")]
-use crate::graph::SparseGraph;
+use crate::nauty_graph::SparseGraph;
 
 use std::cmp::Ord;
 #[cfg(feature = "libc")]

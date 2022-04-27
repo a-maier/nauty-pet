@@ -1,427 +1,596 @@
-use std::cmp::Ord;
+use std::cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd};
 use std::convert::From;
-use std::hash::Hash;
-use std::marker::PhantomData;
-use std::os::raw::c_int;
+use std::ops::Index;
+use std::hash::{Hash, Hasher};
 
-use ahash::AHashMap;
-use itertools::izip;
-use nauty_Traces_sys::{
-    empty_graph,
-    graph,
-    ADDONEARC,
-    SETWORDSNEEDED,
-};
-#[cfg(feature = "libc")]
-use nauty_Traces_sys::{
-    size_t,
-    SparseGraph as NautySparse
-};
+use crate::{IntoCanon, IsIdentical};
 
 use petgraph::{
-    graph::{Graph, IndexType},
-    visit::EdgeRef,
+    data::DataMap,
+    Directed, Direction,
+    graph::{
+        DefaultIx, Edge, EdgeIndex, EdgeIndices, EdgeReference,
+        EdgeReferences, Edges, EdgesConnecting, Externals, Graph,
+        IndexType, Neighbors, Node, NodeIndex, NodeIndices,
+        NodeReferences,
+    },
     EdgeType,
+    IntoWeightedEdge,
+    stable_graph::StableGraph,
+    Undirected,
+    visit::{
+        Data, EdgeCount, EdgeIndexable, EdgeRef, GetAdjacencyMatrix,
+        GraphBase, GraphProp, IntoEdges, IntoEdgeReferences,
+        IntoEdgesDirected, IntoNeighbors, IntoNeighborsDirected,
+        IntoNodeIdentifiers, IntoNodeReferences, NodeCount,
+        NodeIndexable,
+    },
 };
 
-#[cfg(feature = "libc")]
-#[derive(Debug, Default, Clone)]
-pub(crate) struct SparseGraph<N, E, D> {
-    pub(crate) g: NautySparse,
-    pub(crate) nodes: Nodes<N>,
-    edges: AHashMap<(usize, usize), Vec<E>>,
-    dir: PhantomData<D>,
-}
+pub type CanonDiGraph<N, E, Ix> = CanonGraph<N, E, Directed, Ix>;
+pub type CanonUnGraph<N, E, Ix> = CanonGraph<N, E, Undirected, Ix>;
 
-#[derive(Debug, Default, Clone)]
-pub(crate) struct DenseGraph<N, E, D> {
-    pub(crate) n: usize,
-    pub(crate) m: usize,
-    pub(crate) g: Vec<graph>,
-    pub(crate) nodes: Nodes<N>,
-    edges: AHashMap<(usize, usize), Vec<E>>,
-    dir: PhantomData<D>,
-}
+/// Canonically labelled graph
+///
+/// The interface closely mimics
+/// [petgraph::Graph](https://docs.rs/petgraph/latest/petgraph/graph/struct.Graph.html).
+/// The exception are mutating methods, which could potentially
+/// be misused to destroy the canonical labelling.
+///
+/// # Example
+///
+/// ```rust
+/// use std::collections::HashSet;
+/// use petgraph::graph::UnGraph;
+/// use nauty_pet::prelude::*;
+///
+/// let g = UnGraph::<(), ()>::from_edges([(0, 1), (1, 2)]);
+///
+/// // canonical labelling
+/// let g = CanonGraph::from(g);
+///
+/// // we can now use `g` to other canonically labelled graphs and use
+/// // it in associative containers.
+/// assert_eq!(g, g);
+/// let mut graphs = HashSet::new();
+/// graphs.insert(g);
+/// ```
+///
+#[cfg_attr(feature = "serde-1", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug, Default)]
+pub struct CanonGraph<N, E, Ty: EdgeType = Directed, Ix: IndexType = DefaultIx>(
+    Graph<N, E, Ty, Ix>
+);
 
-#[derive(Debug, Default, Clone, Hash)]
-pub(crate) struct Nodes<N> {
-    pub(crate) lab: Vec<c_int>,
-    pub(crate) ptn: Vec<c_int>,
-    pub(crate) weights: Vec<N>,
-}
-
-#[derive(Debug, Default, Clone)]
-struct RawGraphData <N, E, D> {
-    adj: Vec<Vec<c_int>>,
-    nodes: Nodes<N>,
-    edges: AHashMap<(usize, usize), Vec<E>>,
-    #[cfg(feature = "libc")]
-    num_nauty_edges: usize,
-    dir: PhantomData<D>,
-}
-
-fn relabel_to_contiguous_node_weights<N: Ord>(
-    nodes: &mut[N],
-) -> Vec<usize> {
-    let mut new_ord = Vec::from_iter(0..nodes.len());
-    new_ord.sort_unstable_by(|&i, &j| nodes[i].cmp(&nodes[j]));
-    let mut renumber = vec![0; new_ord.len()];
-    for (new_idx, old_idx) in new_ord.iter().enumerate() {
-        renumber[*old_idx] = new_idx;
+impl<N, E, Ty, Ix> CanonGraph<N, E, Ty, Ix>
+where
+    Ty: EdgeType,
+    Ix: IndexType
+{
+    pub fn node_count(&self) -> usize {
+        self.0.node_count()
     }
-    apply_perm(nodes, renumber.clone());
-    for n in nodes.windows(2) {
-        debug_assert!(n[0] <= n[1]);
+
+    pub fn edge_count(&self) -> usize {
+        self.0.edge_count()
     }
-    renumber
+
+    pub fn is_directed(&self) -> bool {
+        self.0.is_directed()
+    }
+
+    pub fn node_weight(&self, a: NodeIndex<Ix>) -> Option<&N> {
+        self.0.node_weight(a)
+    }
+
+    pub fn edge_weight(&self, e: EdgeIndex<Ix>) -> Option<&E> {
+        self.0.edge_weight(e)
+    }
+
+    pub fn edge_endpoints(&self, e: EdgeIndex<Ix>) -> Option<&E> {
+        self.0.edge_weight(e)
+    }
+
+    pub fn neighbors(&self, a: NodeIndex<Ix>) -> Neighbors<'_, E, Ix> {
+        self.0.neighbors(a)
+    }
+
+    pub fn neighbors_directed(
+        &self,
+        a: NodeIndex<Ix>,
+        dir: Direction
+    ) -> Neighbors<'_, E, Ix> {
+        self.0.neighbors_directed(a, dir)
+    }
+
+    pub fn neighbors_undirected(
+        &self,
+        a: NodeIndex<Ix>,
+    ) -> Neighbors<'_, E, Ix> {
+        self.0.neighbors_undirected(a)
+    }
+
+    pub fn edges(
+        &self,
+        a: NodeIndex<Ix>,
+    ) -> Edges<'_, E, Ty, Ix> {
+        self.0.edges(a)
+    }
+
+    pub fn edges_directed(
+        &self,
+        a: NodeIndex<Ix>,
+        dir: Direction
+    ) -> Edges<'_, E, Ty, Ix> {
+        self.0.edges_directed(a, dir)
+    }
+
+    pub fn edges_connecting(
+        &self,
+        a: NodeIndex<Ix>,
+        b: NodeIndex<Ix>,
+    ) -> EdgesConnecting<'_, E, Ty, Ix> {
+        self.0.edges_connecting(a, b)
+    }
+
+    pub fn contains_edge(
+        &self,
+        a: NodeIndex<Ix>,
+        b: NodeIndex<Ix>,
+    ) -> bool {
+        self.0.contains_edge(a, b)
+    }
+
+    pub fn find_edge_undirected(
+        &self,
+        a: NodeIndex<Ix>,
+        b: NodeIndex<Ix>,
+    ) -> Option<(EdgeIndex<Ix>, Direction)> {
+        self.0.find_edge_undirected(a, b)
+    }
+
+    pub fn externals(
+        &self,
+        dir: Direction,
+    ) -> Externals<'_, N, Ty, Ix> {
+        self.0.externals(dir)
+    }
+
+    pub fn node_indices(
+        &self
+    ) -> NodeIndices<Ix> {
+        self.0.node_indices()
+    }
+
+    // TODO: return `NodeWeights<'_, N, Ix>`, but it's private in petgraph 0.6.0
+    pub fn node_weights(
+        &self
+    ) -> impl Iterator<Item = &N> {
+        self.0.node_weights()
+    }
+
+    pub fn edge_indices(
+        &self
+    ) -> EdgeIndices<Ix> {
+        self.0.edge_indices()
+    }
+
+    pub fn edge_references(
+        &self
+    ) -> EdgeReferences<'_, E, Ix> {
+        self.0.edge_references()
+    }
+
+    // TODO: return `EdgeWeights<'_, E, Ix>`, but it's private in petgraph 0.6.0
+    pub fn edge_weights(
+        &self
+    ) -> impl Iterator<Item = &E> {
+        self.0.edge_weights()
+    }
+
+    pub fn raw_nodes(
+        &self
+    ) -> &[Node<N, Ix>] {
+        self.0.raw_nodes()
+    }
+
+    pub fn raw_edges(
+        &self
+    ) -> &[Edge<E, Ix>] {
+        self.0.raw_edges()
+    }
+
+    pub fn into_nodes_edges(
+        self
+    ) -> (Vec<Node<N, Ix>>, Vec<Edge<E, Ix>>) {
+        self.0.into_nodes_edges()
+    }
+
+    pub fn next_edge(
+        &self,
+        e: EdgeIndex<Ix>,
+        dir: Direction
+    ) -> Option<EdgeIndex<Ix>> {
+        self.0.next_edge(e, dir)
+    }
+
+    pub fn capacity(&self) -> (usize, usize) {
+        self.0.capacity()
+    }
 }
 
-fn apply_perm<T>(slice: &mut [T], mut new_pos: Vec<usize>) {
-    const CORRECT_POS: usize = usize::MAX;
-    for idx in 0..slice.len() {
-        let mut next_idx = new_pos[idx];
-        if next_idx == CORRECT_POS {
-            continue;
-        }
-        while next_idx != idx {
-            slice.swap(idx, next_idx);
-            next_idx = std::mem::replace(&mut new_pos[next_idx], CORRECT_POS);
-        }
-    }
-}
-
-impl<N, E, Ty, Ix> From<Graph<N, E, Ty, Ix>> for RawGraphData<(N, Vec<E>), E, Ty>
+impl<N, E, Ty, Ix> CanonGraph<N, E, Ty, Ix>
 where
     Ty: EdgeType,
     Ix: IndexType,
-    N: Ord,
-    E: Hash + Ord,
+    Graph<N, E, Ty, Ix>: IntoCanon,
+{
+    pub fn from_edges<I>(iterable: I) -> Self
+    where
+        I: IntoIterator,
+        I::Item: IntoWeightedEdge<E>,
+        <I::Item as IntoWeightedEdge<E>>::NodeId: Into<NodeIndex<Ix>>,
+        N: Default,
+    {
+        Self( Graph::from_edges(iterable).into_canon() )
+    }
+}
+
+
+impl<N, E, Ty, Ix> From<Graph<N, E, Ty, Ix>> for CanonGraph<N, E, Ty, Ix>
+where
+    Graph<N, E, Ty, Ix>: IntoCanon,
+    Ty: EdgeType,
+    Ix: IndexType,
 {
     fn from(g: Graph<N, E, Ty, Ix>) -> Self {
-        use petgraph::visit::NodeIndexable;
-        let is_directed = g.is_directed();
-        let edges = Vec::from_iter(
-            g.edge_references()
-                .map(|e| (g.to_index(e.source()), g.to_index(e.target()))),
-        );
-        let (nodes, e) = g.into_nodes_edges();
-        let mut node_weights = Vec::from_iter(
-            nodes.into_iter().map(
-                |n| (n.weight, Vec::new())
-            )
-        );
-
-        // edge weights
-        // we combine multiple edges into a single one with an
-        // effective weight given by the sorted vector of the
-        // individual weights
-        // self-loops are removed and their weights instead appended
-        // to the corresponding node weight
-        let mut edge_weights: AHashMap<_, Vec<E>> = AHashMap::new();
-        for (edge, wt) in izip!(edges, e.into_iter().map(|e| e.weight)) {
-            if edge.0 == edge.1 {
-                node_weights[edge.0].1.push(wt);
-            } else {
-                edge_weights.entry(edge).or_default().push(wt);
-            }
-        }
-        for v in edge_weights.values_mut() {
-            v.sort_unstable();
-        }
-        let relabel = relabel_to_contiguous_node_weights(&mut node_weights);
-        let edge_weights: AHashMap<_, _> = edge_weights.into_iter().map(
-            |(e, wt)| {
-                let mut e = (relabel[e.0], relabel[e.1]);
-                if !is_directed && e.0 > e.1 {
-                    std::mem::swap(&mut e.0, &mut e.1)
-                }
-                (e, wt)
-            }
-        ).collect();
-
-        // the edge weight that appears most often is taken to be the default
-        // for all other edge weights we introduce auxiliary vertices
-        // each non-default edge weight has its own vertex type (colour)
-        let mut edge_weight_counts: AHashMap<&[E], u32> = AHashMap::new();
-        for v in edge_weights.values() {
-            *edge_weight_counts.entry(v).or_default() += 1;
-        }
-        let mut edge_weight_counts = Vec::from_iter(edge_weight_counts);
-        edge_weight_counts.sort_unstable();
-        let max_pos = edge_weight_counts
-            .iter()
-            .enumerate()
-            .max_by_key(|(_n, (_k, v))| v)
-            .map(|(n, _)| n);
-        if let Some(max_pos) = max_pos {
-            edge_weight_counts.remove(max_pos);
-        }
-
-        let aux_vertex_type: AHashMap<_, _> = edge_weight_counts
-            .into_iter()
-            .enumerate()
-            .map(|(n, (k, _))| (k, n))
-            .collect();
-
-        // We introduce one auxiliar vertex for each edge with
-        // non-default weight.
-        let mut num_aux = vec![0; aux_vertex_type.len()];
-        for ((source, target), w) in &edge_weights {
-            debug_assert_ne!(source, target);
-            if let Some(&aux_type) = aux_vertex_type.get(w.as_slice()) {
-                num_aux[aux_type] += 1;
-            }
-        }
-
-        let total_num_aux: usize = num_aux.iter().sum();
-        let num_nauty_vertices = node_weights.len() + total_num_aux;
-
-        let mut aux_vx_idx = Vec::from_iter(num_aux.iter().scan(
-            node_weights.len(),
-            |partial_sum, n| {
-                let idx = *partial_sum;
-                *partial_sum += n;
-                Some(idx)
-            },
-        ));
-        let mut adj = vec![vec![]; num_nauty_vertices];
-        fn add_edge(
-            adj: &mut [Vec<c_int>],
-            source: usize,
-            target: usize,
-            is_directed: bool,
-        ) {
-            adj[source].push(target as c_int);
-            if !is_directed {
-                adj[target].push(source as c_int);
-            }
-        }
-
-        for (edge, wt) in &edge_weights {
-            let (source, target) = *edge;
-            debug_assert_ne!(source, target);
-            if let Some(&aux_vx_type) = aux_vertex_type.get(wt.as_slice()) {
-                // non-default weight, introduce an extra vertex
-                add_edge(
-                    &mut adj,
-                    source,
-                    aux_vx_idx[aux_vx_type],
-                    is_directed,
-                );
-                add_edge(
-                    &mut adj,
-                    aux_vx_idx[aux_vx_type],
-                    target,
-                    is_directed,
-                );
-                aux_vx_idx[aux_vx_type] += 1;
-            } else {
-                add_edge(&mut adj, source, target, is_directed);
-            }
-        }
-        let mut ptn = vec![1; num_nauty_vertices];
-        for (ptn, wts) in izip!(&mut ptn, node_weights.windows(2)) {
-            if wts[1] > wts[0] {
-                *ptn = 0;
-            }
-        }
-        if !ptn.is_empty() {
-            ptn[node_weights.len() - 1] = 0;
-            for i in aux_vx_idx {
-                ptn[i - 1] = 0;
-            }
-        }
-        let lab = (0..num_nauty_vertices as i32).collect();
-        let nodes = Nodes {
-            weights: node_weights,
-            lab,
-            ptn,
-        };
-        #[cfg(feature = "libc")]
-        let num_nauty_edges = {
-            let num_nauty_edges = edge_weights.len() + total_num_aux;
-            if is_directed {
-                num_nauty_edges
-            } else {
-                2 * num_nauty_edges
-            }
-        };
-        Self {
-            adj,
-            edges: edge_weights,
-            #[cfg(feature = "libc")]
-            num_nauty_edges,
-            nodes,
-            dir: PhantomData,
-        }
+        Self ( g.into_canon() )
     }
 }
 
-#[cfg(feature = "libc")]
-impl<N, E, Ty> From<RawGraphData<N, E, Ty>> for SparseGraph<N, E, Ty>
-where
-    Ty: EdgeType,
-    N: Ord,
-    E: Hash + Ord,
-{
-    fn from(g: RawGraphData<N, E, Ty>) -> Self {
-        let adj = g.adj;
-        let mut sg = NautySparse::new(adj.len(), g.num_nauty_edges);
-        let mut vpos = 0;
-        for (adj, d, v) in izip!(adj, &mut sg.d, &mut sg.v) {
-            *d = adj.len() as c_int;
-            *v = vpos;
-            let start = vpos as usize;
-            let end = start + *d as usize;
-            sg.e[start..end].copy_from_slice(&adj);
-            vpos += *d as size_t
-        }
-        debug_assert!(sg.v.len() >= g.nodes.weights.len());
-
-        Self {
-            g: sg,
-            edges: g.edges,
-            nodes: g.nodes,
-            dir: PhantomData,
-        }
-    }
-}
-
-#[cfg(feature = "libc")]
-impl<N, E, Ty, Ix> From<Graph<N, E, Ty, Ix>> for SparseGraph<(N, Vec<E>), E, Ty>
+impl<N, E, Ty, Ix> From<CanonGraph<N, E, Ty, Ix>> for Graph<N, E, Ty, Ix>
 where
     Ty: EdgeType,
     Ix: IndexType,
-    N: Ord,
-    E: Hash + Ord,
 {
-    fn from(g: Graph<N, E, Ty, Ix>) -> Self {
-        let g: RawGraphData<_, _, _> = g.into();
-        g.into()
+    fn from(g: CanonGraph<N, E, Ty, Ix>) -> Self {
+        g.0
     }
 }
 
-impl<N, E, Ty> From<RawGraphData<N, E, Ty>> for DenseGraph<N, E, Ty>
+impl<N, E, Ty, Ix> Data for CanonGraph<N, E, Ty, Ix>
+where
+    CanonGraph<N, E, Ty, Ix>: GraphBase,
+    Graph<N, E, Ty, Ix>: Data,
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    type NodeWeight = N;
+    type EdgeWeight = E;
+}
+
+impl<N, E, Ty, Ix> DataMap for CanonGraph<N, E, Ty, Ix>
+where
+    CanonGraph<N, E, Ty, Ix>: GraphBase<NodeId = NodeIndex<Ix>, EdgeId = EdgeIndex<Ix>>,
+    CanonGraph<N, E, Ty, Ix>: Data<NodeWeight = N, EdgeWeight = E>,
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    fn node_weight(&self, id: Self::NodeId) -> Option<&Self::NodeWeight> {
+        Self::node_weight(&self, id)
+    }
+    fn edge_weight(&self, id: Self::EdgeId) -> Option<&Self::EdgeWeight> {
+        Self::edge_weight(&self, id)
+    }
+}
+
+impl<N, E, Ty, Ix> EdgeCount for CanonGraph<N, E, Ty, Ix>
+where
+    CanonGraph<N, E, Ty, Ix>: GraphBase<NodeId = NodeIndex<Ix>, EdgeId = EdgeIndex<Ix>>,
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    fn edge_count(&self) -> usize {
+        self.0.edge_count()
+    }
+}
+
+impl<N, E, Ty, Ix> EdgeIndexable for CanonGraph<N, E, Ty, Ix>
+where
+    CanonGraph<N, E, Ty, Ix>: GraphBase<NodeId = NodeIndex<Ix>, EdgeId = EdgeIndex<Ix>>,
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    fn edge_bound(&self) -> usize {
+        self.0.edge_bound()
+    }
+
+    fn to_index(&self, ix: EdgeIndex<Ix>) -> usize {
+        EdgeIndexable::to_index(&self.0, ix)
+    }
+
+    fn from_index(&self, ix: usize) -> Self::EdgeId {
+        EdgeIndexable::from_index(&self.0, ix)
+    }
+}
+
+impl<N, E, Ty, Ix> From<CanonGraph<N, E, Ty, Ix>> for StableGraph<N, E, Ty, Ix>
 where
     Ty: EdgeType,
-    N: Ord,
-    E: Hash + Ord,
+    Ix: IndexType
 {
-    fn from(g: RawGraphData<N, E, Ty>) -> Self {
-        let adj = g.adj;
-        let n = adj.len();
-        let m = SETWORDSNEEDED(n);
-        let mut dg = empty_graph(m, n);
-        for (source, adj) in adj.into_iter().enumerate() {
-            for target in adj {
-                ADDONEARC(&mut dg, source, target as usize, m);
-            }
-        }
-
-        Self {
-            n,
-            m,
-            g: dg,
-            edges: g.edges,
-            nodes: g.nodes,
-            dir: PhantomData,
-        }
+    fn from(g: CanonGraph<N, E, Ty, Ix>) -> Self {
+        g.0.into()
     }
 }
 
-impl<N, E, Ty, Ix> From<Graph<N, E, Ty, Ix>> for DenseGraph<(N, Vec<E>), E, Ty>
+impl<N, E, Ty, Ix> From<StableGraph<N, E, Ty, Ix>> for CanonGraph<N, E, Ty, Ix>
+where
+    Graph<N, E, Ty, Ix>: IntoCanon,
+    Ty: EdgeType,
+    Ix: IndexType
+{
+    fn from(g: StableGraph<N, E, Ty, Ix>) -> Self {
+        let g: Graph<_, _, _, _> = g.into();
+        Self ( g.into_canon() )
+    }
+}
+
+impl<N, E, Ty, Ix> GetAdjacencyMatrix for CanonGraph<N, E, Ty, Ix>
 where
     Ty: EdgeType,
     Ix: IndexType,
-    N: Ord,
-    E: Hash + Ord,
+    CanonGraph<N, E, Ty, Ix>: GraphBase<NodeId = NodeIndex<Ix>, EdgeId = EdgeIndex<Ix>>,
+    Graph<N, E, Ty, Ix>: GraphBase<NodeId = NodeIndex<Ix>, EdgeId = EdgeIndex<Ix>>,
+    Graph<N, E, Ty, Ix>: GetAdjacencyMatrix,
 {
-    fn from(g: Graph<N, E, Ty, Ix>) -> Self {
-        let g: RawGraphData<_, _, _> = g.into();
-        g.into()
+
+    type AdjMatrix = <Graph<N, E, Ty, Ix> as GetAdjacencyMatrix>::AdjMatrix;
+
+    fn adjacency_matrix(&self) -> Self::AdjMatrix {
+        self.0.adjacency_matrix()
+    }
+
+    fn is_adjacent(
+        &self,
+        matrix: &Self::AdjMatrix,
+        a: NodeIndex<Ix>,
+        b: NodeIndex<Ix>
+    ) -> bool {
+        self.0.is_adjacent(matrix, a, b)
     }
 }
 
-fn inv_perm(perm: &[c_int]) -> Vec<usize> {
-    let mut relabel = vec![0; perm.len()];
-    for (new, &old) in perm.iter().enumerate() {
-        relabel[old as usize] = new;
-    }
-    relabel
+impl<N, E, Ty, Ix> GraphBase for CanonGraph<N, E, Ty, Ix>
+where
+    Ty: EdgeType,
+    Ix: IndexType
+{
+    type NodeId = NodeIndex<Ix>;
+
+    type EdgeId = EdgeIndex<Ix>;
 }
 
-fn into_graph<N, E, Ty, Ix>(
-    node_weights: Vec<(N, Vec<E>)>,
-    edge_weights: AHashMap<(usize, usize), Vec<E>>,
-    lab: &[c_int],
-) -> Graph<N, E, Ty, Ix>
+impl<N, E, Ty, Ix> GraphProp for CanonGraph<N, E, Ty, Ix>
+where
+    Ty: EdgeType,
+    Ix: IndexType, {
+
+    type EdgeType = Ty;
+
+    fn is_directed(&self) -> bool {
+        self.0.is_directed()
+    }
+}
+
+impl<N, E, Ty, Ix> Index<EdgeIndex<Ix>> for CanonGraph<N, E, Ty, Ix>
 where
     Ty: EdgeType,
     Ix: IndexType,
-    E: Ord,
 {
-    // TODO: check if precalculating the number of edges helps
-    let mut res = Graph::with_capacity(node_weights.len(), 0);
-    let relabel = inv_perm(lab);
-    let mut edges = Vec::new();
-    let is_directed = Ty::is_directed();
+    type Output = E;
 
-    // nodes + self-loops
-    let mut node_weights =
-        Vec::from_iter(izip!(relabel.iter().copied(), node_weights));
-    node_weights.sort_unstable_by_key(|e| e.0);
-    for (n, i) in node_weights.iter().map(|(i, _w)| i).enumerate() {
-        debug_assert_eq!(n, *i as usize)
-    }
-    for (_, (w, loops)) in node_weights {
-        for w in loops {
-            edges.push((res.node_count(), res.node_count(), w))
-        }
-        res.add_node(w);
-    }
-
-    // edges
-    for ((source, target), weights) in edge_weights {
-        let mut source = relabel[source as usize];
-        let mut target = relabel[target as usize];
-        if !is_directed && source > target {
-            std::mem::swap(&mut source, &mut target);
-        }
-        for w in weights {
-            edges.push((source, target, w));
-        }
-    }
-    edges.sort_unstable();
-    for (source, target, weight) in edges {
-        use petgraph::visit::NodeIndexable;
-        let source = res.from_index(source as usize);
-        let target = res.from_index(target as usize);
-        res.add_edge(source, target, weight);
-    }
-
-    res
-}
-
-impl<N, E, Ty, Ix> From<DenseGraph<(N, Vec<E>), E, Ty>> for Graph<N, E, Ty, Ix>
-where
-    Ty: EdgeType,
-    Ix: IndexType,
-    E: Ord,
-{
-    fn from(g: DenseGraph<(N, Vec<E>), E, Ty>) -> Self {
-        into_graph(g.nodes.weights, g.edges, &g.nodes.lab)
+    fn index(&self, index: EdgeIndex<Ix>) -> &E {
+        self.0.index(index)
     }
 }
 
-#[cfg(feature = "libc")]
-impl<N, E, Ty, Ix> From<SparseGraph<(N, Vec<E>), E, Ty>> for Graph<N, E, Ty, Ix>
+
+impl<N, E, Ty, Ix> Index<NodeIndex<Ix>> for CanonGraph<N, E, Ty, Ix>
 where
     Ty: EdgeType,
     Ix: IndexType,
-    E: Ord,
 {
-    fn from(g: SparseGraph<(N, Vec<E>), E, Ty>) -> Self {
-        into_graph(g.nodes.weights, g.edges, &g.nodes.lab)
+    type Output = N;
+
+    fn index(&self, index: NodeIndex<Ix>) -> &N {
+        self.0.index(index)
+    }
+}
+
+impl<'a, N: 'a, E: 'a, Ty, Ix> IntoEdgeReferences for &'a CanonGraph<N, E, Ty, Ix>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    type EdgeRef = EdgeReference<'a, E, Ix>;
+    type EdgeReferences = EdgeReferences<'a, E, Ix>;
+
+    fn edge_references(self) -> Self::EdgeReferences {
+        self.0.edge_references()
+    }
+}
+
+impl<'a, N, E, Ty, Ix> IntoEdges for &'a CanonGraph<N, E, Ty, Ix>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    type Edges = Edges<'a, E, Ty, Ix>;
+
+    fn edges(self, a: Self::NodeId) -> Self::Edges {
+        self.0.edges(a)
+    }
+}
+
+impl<'a, N, E, Ty, Ix> IntoEdgesDirected for &'a CanonGraph<N, E, Ty, Ix>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    type EdgesDirected = Edges<'a, E, Ty, Ix>;
+
+    fn edges_directed(self, a: Self::NodeId, dir: Direction) -> Self::EdgesDirected {
+        self.0.edges_directed(a, dir)
+    }
+}
+
+impl<'a, N, E: 'a, Ty, Ix> IntoNeighbors for &'a CanonGraph<N, E, Ty, Ix>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    type Neighbors = Neighbors<'a, E, Ix>;
+
+    fn neighbors(self, n: NodeIndex<Ix>) -> Neighbors<'a, E, Ix> {
+        self.neighbors(n)
+    }
+}
+
+impl<'a, N, E: 'a, Ty, Ix> IntoNeighborsDirected for &'a CanonGraph<N, E, Ty, Ix>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    type NeighborsDirected = Neighbors<'a, E, Ix>;
+
+    fn neighbors_directed(
+        self,
+        n: NodeIndex<Ix>,
+        d: Direction
+    ) -> Neighbors<'a, E, Ix> {
+        self.neighbors_directed(n, d)
+    }
+}
+
+impl<'a, N, E: 'a, Ty, Ix> IntoNodeIdentifiers for &'a CanonGraph<N, E, Ty, Ix>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    type NodeIdentifiers = NodeIndices<Ix>;
+
+    fn node_identifiers(self) -> NodeIndices<Ix> {
+        self.0.node_identifiers()
+    }
+}
+
+impl<'a, N, E, Ty, Ix> IntoNodeReferences for &'a CanonGraph<N, E, Ty, Ix>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    type NodeRef = (NodeIndex<Ix>, &'a N);
+    type NodeReferences = NodeReferences<'a, N, Ix>;
+
+    fn node_references(self) -> Self::NodeReferences {
+        self.0.node_references()
+    }
+}
+
+impl<N, E, Ty, Ix> NodeCount for CanonGraph<N, E, Ty, Ix>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    fn node_count(&self) -> usize {
+        self.0.node_count()
+    }
+}
+
+impl<N, E, Ty, Ix> NodeIndexable for CanonGraph<N, E, Ty, Ix>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    fn node_bound(&self) -> usize {
+        self.0.node_bound()
+    }
+
+    fn to_index(&self, ix: NodeIndex<Ix>) -> usize {
+        NodeIndexable::to_index(&self.0, ix)
+    }
+
+    fn from_index(&self, ix: usize) -> Self::NodeId {
+        NodeIndexable::from_index(&self.0, ix)
+    }
+}
+
+impl<N, E, Ty, Ix> PartialEq for CanonGraph<N, E, Ty, Ix>
+where
+    N: PartialEq,
+    E: PartialEq,
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.0.is_identical(&other.0)
+    }
+}
+impl<N: Eq, E: Eq, Ty: EdgeType, Ix: IndexType> Eq for CanonGraph<N, E, Ty, Ix> { }
+
+impl<N: Hash, E: Hash, Ty: EdgeType, Ix: IndexType> Hash for CanonGraph<N, E, Ty, Ix> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for w in self.0.node_weights() {
+            w.hash(state)
+        }
+        for e in self.0.edge_references() {
+            e.source().hash(state);
+            e.target().hash(state);
+            e.weight().hash(state);
+        }
+    }
+}
+
+// Doesn't have to make much sense, just give a reproducible ordering
+impl<N: Ord, E: Ord, Ty: EdgeType, Ix: IndexType> Ord for CanonGraph<N, E, Ty, Ix> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let cmp = self.0.node_weights().cmp(other.0.node_weights());
+        if cmp == Ordering::Equal {
+            let my_edges = self.0.edge_references().map(
+                |e| (e.source(), e.target(), e.weight())
+            );
+            let other_edges = self.0.edge_references().map(
+                |e| (e.source(), e.target(), e.weight())
+            );
+            my_edges.cmp(other_edges)
+        } else {
+            cmp
+        }
+    }
+}
+
+impl<N, E, Ty, Ix> PartialOrd for CanonGraph<N, E, Ty, Ix>
+where
+    N: PartialOrd,
+    E: PartialOrd,
+    Ty: EdgeType,
+    Ix: IndexType
+{
+    // TODO: code duplication
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        let cmp = self.0.node_weights().partial_cmp(other.0.node_weights());
+        if cmp == Some(Ordering::Equal) {
+            let my_edges = self.0.edge_references().map(
+                |e| (e.source(), e.target(), e.weight())
+            );
+            let other_edges = self.0.edge_references().map(
+                |e| (e.source(), e.target(), e.weight())
+            );
+            my_edges.partial_cmp(other_edges)
+        } else {
+            cmp
+        }
     }
 }
 
@@ -429,125 +598,32 @@ where
 mod tests {
     use super::*;
 
-    use std::fmt::Debug;
-
     use log::debug;
-    use petgraph::{
-        algo::isomorphism::is_isomorphic,
-        graph::{DiGraph, Graph, IndexType, UnGraph},
-        Directed, EdgeType, Undirected,
-    };
-    use testing::GraphIter;
+    use rand::prelude::*;
+    use rand_xoshiro::Xoshiro256Plus;
+    use testing::{GraphIter, randomize_labels};
+
 
     fn log_init() {
         let _ = env_logger::builder().is_test(true).try_init();
     }
 
-    #[cfg(feature = "libc")]
-    fn tst_conv_sparse<N, E, Ty, Ix>(g: Graph<N, E, Ty, Ix>)
-    where
-        N: Clone + Debug + Ord,
-        E: Clone + Debug + Ord + Hash,
-        Ty: Debug + EdgeType,
-        Ix: IndexType,
-    {
-        debug!("Initial graph: {g:#?}");
-        let s = SparseGraph::from(g.clone());
-        debug!("Nauty graph: {s:#?}");
-        let gg: Graph<N, E, Ty, Ix> = s.into();
-        debug!("Final graph: {gg:#?}");
-        assert!(is_isomorphic(&g, &gg));
-    }
-
-    fn tst_conv_dense<N, E, Ty, Ix>(g: Graph<N, E, Ty, Ix>)
-    where
-        N: Clone + Debug + Ord,
-        E: Clone + Debug + Ord + Hash,
-        Ty: Debug + EdgeType,
-        Ix: IndexType,
-    {
-        debug!("Initial graph: {g:#?}");
-        let s = DenseGraph::from(g.clone());
-        debug!("Nauty graph: {s:#?}");
-        let gg: Graph<N, E, Ty, Ix> = s.into();
-        debug!("Final graph: {gg:#?}");
-        assert!(is_isomorphic(&g, &gg));
-    }
-
-    #[cfg(feature = "libc")]
     #[test]
-    fn simple_conversion_sparse() {
+    fn random_canon_graph() {
         log_init();
 
-        tst_conv_sparse(Graph::<(), (), _>::new_undirected());
-        tst_conv_sparse(UnGraph::<(), ()>::from_edges([(0, 1), (2, 0)]));
-        tst_conv_sparse(UnGraph::<(), i32>::from_edges([(0, 1, -1), (2, 0, 1)]));
-        tst_conv_sparse(DiGraph::<(), ()>::from_edges([
-            (0, 1),
-            (1, 1),
-            (0, 2),
-            (2, 0),
-        ]));
-        tst_conv_sparse(DiGraph::<(), u32>::from_edges([
-            (0, 1, 0),
-            (1, 1, 0),
-            (0, 2, 0),
-            (2, 0, 1),
-        ]));
-    }
+        let mut rng = Xoshiro256Plus::seed_from_u64(0);
+        let graphs = GraphIter::<Undirected>::default();
 
-    #[test]
-    fn simple_conversion_dense() {
-        log_init();
-
-        tst_conv_dense(Graph::<(), (), _>::new_undirected());
-        tst_conv_dense(UnGraph::<(), ()>::from_edges([(0, 1), (2, 0)]));
-        tst_conv_dense(UnGraph::<(), i32>::from_edges([(0, 1, -1), (2, 0, 1)]));
-        tst_conv_dense(DiGraph::<(), ()>::from_edges([
-            (0, 1),
-            (1, 1),
-            (0, 2),
-            (2, 0),
-        ]));
-        tst_conv_dense(DiGraph::<(), u32>::from_edges([
-            (0, 1, 0),
-            (1, 1, 0),
-            (0, 2, 0),
-            (2, 0, 1),
-        ]));
-    }
-
-    #[cfg(feature = "libc")]
-    #[test]
-    fn random_conversion_sparse_undirected() {
-        log_init();
-        for g in GraphIter::<Undirected>::default().take(1000) {
-            tst_conv_sparse(g);
-        }
-    }
-
-    #[cfg(feature = "libc")]
-    #[test]
-    fn random_conversion_sparse_directed() {
-        log_init();
-        for g in GraphIter::<Directed>::default().take(700) {
-            tst_conv_sparse(g);
-        }
-    }
-
-    #[test]
-    fn random_conversion_dense_undirected() {
-        log_init();
-        for g in GraphIter::<Undirected>::default().take(1000) {
-            tst_conv_dense(g);
-        }
-    }
-
-    #[test]
-    fn random_conversion_dense_directed() {
-        log_init();
-        for g in GraphIter::<Directed>::default().take(700) {
-            tst_conv_dense(g);
+        for g in graphs.take(1000) {
+            debug!("Initial graph: {g:#?}");
+            let gg = randomize_labels(g.clone(), &mut rng);
+            debug!("Randomised graph: {gg:#?}");
+            let g = CanonGraph::from(g);
+            debug!("Canonical graph (from initial): {g:#?}");
+            let gg = CanonGraph::from(gg);
+            debug!("Canonical graph (from randomised): {gg:#?}");
+            assert_eq!(g, gg);
         }
     }
 }
