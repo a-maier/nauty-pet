@@ -542,4 +542,16 @@ mod tests {
             tst_conv_dense(g);
         }
     }
+
+    #[test]
+    fn asym_conversion() {
+        log_init();
+
+        let g = UnGraph::<(), ()>::from_edges(
+            [(0,1), (1,0)]
+        );
+        tst_conv_sparse(g.clone());
+        tst_conv_dense(g);
+    }
+
 }
