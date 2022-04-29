@@ -106,10 +106,13 @@ where
         // self-loops are removed and their weights instead appended
         // to the corresponding node weight
         let mut edge_weights: AHashMap<_, Vec<E>> = AHashMap::new();
-        for (edge, wt) in izip!(edges, e.into_iter().map(|e| e.weight)) {
+        for (mut edge, wt) in izip!(edges, e.into_iter().map(|e| e.weight)) {
             if edge.0 == edge.1 {
                 node_weights[edge.0].1.push(wt);
             } else {
+                if !is_directed && edge.0 > edge.1 {
+                    std::mem::swap(&mut edge.0, &mut edge.1)
+                }
                 edge_weights.entry(edge).or_default().push(wt);
             }
         }
