@@ -438,12 +438,9 @@ mod tests {
     fn asym() {
         log_init();
 
-        let g = UnGraph::<(), ()>::from_edges(
-            [(0,1), (1,0)]
-        );
+        let g = UnGraph::<(), ()>::from_edges([(0, 1), (1, 0)]);
         assert!(is_isomorphic(&g, &g.clone().into_canon()));
     }
-
 
     #[test]
     fn empty() {
