@@ -43,7 +43,7 @@
 //! Afterwards, add this to your Cargo.toml:
 //! ```toml
 //! [dependencies]
-//! nauty-pet = { version = "0.5", features = ["libc"] }
+//! nauty-pet = { version = "0.6", features = ["libc"] }
 //! ```
 mod autom;
 pub mod canon;
