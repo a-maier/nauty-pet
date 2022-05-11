@@ -44,8 +44,8 @@ pub type CanonUnGraph<N, E, Ix> = CanonGraph<N, E, Undirected, Ix>;
 /// // canonical labelling
 /// let g = CanonGraph::from(g);
 ///
-/// // we can now use `g` to other canonically labelled graphs and use
-/// // it in associative containers.
+/// // we can now compare `g` to other canonically labelled graphs and
+/// // use it in associative containers.
 /// assert_eq!(g, g);
 /// let mut graphs = HashSet::new();
 /// graphs.insert(g);
