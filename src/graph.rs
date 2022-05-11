@@ -62,6 +62,11 @@ where
     Ty: EdgeType,
     Ix: IndexType,
 {
+    /// Gets a reference to the underlying `petgraph::Graph`
+    pub fn get(&self) -> &Graph<N, E, Ty, Ix> {
+        &self.0
+    }
+
     pub fn node_count(&self) -> usize {
         self.0.node_count()
     }
@@ -202,6 +207,16 @@ where
         N: Default,
     {
         Self(Graph::from_edges(iterable).into_canon())
+    }
+}
+
+impl<N, E, Ty, Ix> AsRef<Graph<N, E, Ty, Ix>> for CanonGraph<N, E, Ty, Ix>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    fn as_ref(&self) -> &Graph<N, E, Ty, Ix> {
+        &self.0
     }
 }
 
