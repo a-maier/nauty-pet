@@ -1,10 +1,10 @@
-use std::cmp::Ord;
+use std::cmp::{Ord, Ordering};
 use std::convert::From;
 use std::hash::Hash;
 use std::marker::PhantomData;
 use std::os::raw::c_int;
 
-use ahash::AHashMap;
+use ahash::RandomState;
 use itertools::izip;
 use nauty_Traces_sys::{empty_graph, graph, ADDONEARC, SETWORDSNEEDED};
 #[cfg(feature = "libc")]
@@ -16,12 +16,56 @@ use petgraph::{
     EdgeType,
 };
 
+#[cfg(feature = "stable")]
+type HashMap<K, V> = indexmap::IndexMap<K, V, RandomState>;
+#[cfg(feature = "stable")]
+fn sort<T: Ord>(slice: &mut[T]) {
+    slice.sort()
+}
+#[cfg(feature = "stable")]
+fn sort_by<T: Ord, F>(slice: &mut[T], cmp: F)
+where
+    F: FnMut(&T, &T) -> Ordering
+{
+    slice.sort_by(cmp)
+}
+#[cfg(feature = "stable")]
+fn sort_by_key<T, K, F>(slice: &mut[T], f: F)
+where
+    F: FnMut(&T) -> K,
+    K: Ord
+{
+    slice.sort_by_key(f)
+}
+
+#[cfg(not(feature = "stable"))]
+type HashMap<K, V> = ahash::AHashMap<K, V, RandomState>;
+#[cfg(not(feature = "stable"))]
+fn sort<T: Ord>(slice: &mut[T]) {
+    slice.sort_unstable()
+}
+#[cfg(not(feature = "stable"))]
+fn sort_by<T: Ord, F>(slice: &mut[T], cmp: F)
+where
+    F: FnMut(&T, &T) -> Ordering
+{
+    slice.sort_unstable_by(cmp)
+}
+#[cfg(not(feature = "stable"))]
+fn sort_by_key<T, K, F>(slice: &mut[T], f: F)
+where
+    F: FnMut(&T) -> K,
+    K: Ord
+{
+    slice.sort_unstable_by_key(f)
+}
+
 #[cfg(feature = "libc")]
 #[derive(Debug, Default, Clone)]
 pub(crate) struct SparseGraph<N, E, D> {
     pub(crate) g: NautySparse,
     pub(crate) nodes: Nodes<N>,
-    edges: AHashMap<(usize, usize), Vec<E>>,
+    edges: HashMap<(usize, usize), Vec<E>>,
     dir: PhantomData<D>,
 }
 
@@ -31,7 +75,7 @@ pub(crate) struct DenseGraph<N, E, D> {
     pub(crate) m: usize,
     pub(crate) g: Vec<graph>,
     pub(crate) nodes: Nodes<N>,
-    edges: AHashMap<(usize, usize), Vec<E>>,
+    edges: HashMap<(usize, usize), Vec<E>>,
     dir: PhantomData<D>,
 }
 
@@ -46,7 +90,7 @@ pub(crate) struct Nodes<N> {
 struct RawGraphData<N, E, D> {
     adj: Vec<Vec<c_int>>,
     nodes: Nodes<N>,
-    edges: AHashMap<(usize, usize), Vec<E>>,
+    edges: HashMap<(usize, usize), Vec<E>>,
     #[cfg(feature = "libc")]
     num_nauty_edges: usize,
     dir: PhantomData<D>,
@@ -54,7 +98,7 @@ struct RawGraphData<N, E, D> {
 
 fn relabel_to_contiguous_node_weights<N: Ord>(nodes: &mut [N]) -> Vec<usize> {
     let mut new_ord = Vec::from_iter(0..nodes.len());
-    new_ord.sort_unstable_by(|&i, &j| nodes[i].cmp(&nodes[j]));
+    sort_by(&mut new_ord, |&i, &j| nodes[i].cmp(&nodes[j]));
     let mut renumber = vec![0; new_ord.len()];
     for (new_idx, old_idx) in new_ord.iter().enumerate() {
         renumber[*old_idx] = new_idx;
@@ -105,7 +149,7 @@ where
         // individual weights
         // self-loops are removed and their weights instead appended
         // to the corresponding node weight
-        let mut edge_weights: AHashMap<_, Vec<E>> = AHashMap::new();
+        let mut edge_weights: HashMap<_, Vec<E>> = HashMap::default();
         for (mut edge, wt) in izip!(edges, e.into_iter().map(|e| e.weight)) {
             if edge.0 == edge.1 {
                 node_weights[edge.0].1.push(wt);
@@ -117,10 +161,10 @@ where
             }
         }
         for v in edge_weights.values_mut() {
-            v.sort_unstable();
+            sort(v);
         }
         let relabel = relabel_to_contiguous_node_weights(&mut node_weights);
-        let edge_weights: AHashMap<_, _> = edge_weights
+        let edge_weights: HashMap<_, _> = edge_weights
             .into_iter()
             .map(|(e, wt)| {
                 let mut e = (relabel[e.0], relabel[e.1]);
@@ -134,12 +178,12 @@ where
         // the edge weight that appears most often is taken to be the default
         // for all other edge weights we introduce auxiliary vertices
         // each non-default edge weight has its own vertex type (colour)
-        let mut edge_weight_counts: AHashMap<&[E], u32> = AHashMap::new();
+        let mut edge_weight_counts: HashMap<&[E], u32> = HashMap::default();
         for v in edge_weights.values() {
             *edge_weight_counts.entry(v).or_default() += 1;
         }
         let mut edge_weight_counts = Vec::from_iter(edge_weight_counts);
-        edge_weight_counts.sort_unstable();
+        sort(&mut edge_weight_counts);
         let max_pos = edge_weight_counts
             .iter()
             .enumerate()
@@ -149,7 +193,7 @@ where
             edge_weight_counts.remove(max_pos);
         }
 
-        let aux_vertex_type: AHashMap<_, _> = edge_weight_counts
+        let aux_vertex_type: HashMap<_, _> = edge_weight_counts
             .into_iter()
             .enumerate()
             .map(|(n, (k, _))| (k, n))
@@ -344,7 +388,7 @@ fn inv_perm(perm: &[c_int]) -> Vec<usize> {
 
 fn into_graph<N, E, Ty, Ix>(
     node_weights: Vec<(N, Vec<E>)>,
-    edge_weights: AHashMap<(usize, usize), Vec<E>>,
+    edge_weights: HashMap<(usize, usize), Vec<E>>,
     lab: &[c_int],
 ) -> Graph<N, E, Ty, Ix>
 where
@@ -361,7 +405,7 @@ where
     // nodes + self-loops
     let mut node_weights =
         Vec::from_iter(izip!(relabel.iter().copied(), node_weights));
-    node_weights.sort_unstable_by_key(|e| e.0);
+    sort_by_key(&mut node_weights, |e| e.0);
     for (n, i) in node_weights.iter().map(|(i, _w)| i).enumerate() {
         debug_assert_eq!(n, *i as usize)
     }
@@ -383,7 +427,7 @@ where
             edges.push((source, target, w));
         }
     }
-    edges.sort_unstable();
+    sort(&mut edges);
     for (source, target, weight) in edges {
         use petgraph::visit::NodeIndexable;
         let source = res.from_index(source as usize);
