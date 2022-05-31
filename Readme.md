@@ -38,14 +38,22 @@ assert_eq!(c1, c2);
 
 ## Features
 
-To enable the use of sparse graphs for canonisation, ensure that
-the nauty and Traces library is linked to the same C library as
-this crate.
+* `libc`: Allows using sparse graphs for canonisation. Before
+          enabling this feature, ensure that the nauty and Traces
+          library is linked to the same C library as this crate.
 
-Afterwards, add this to your Cargo.toml:
+* `serde-1`: Enables serialisation of
+             [CanonGraph](graph::CanonGraph) objects using
+             [serde](https://crates.io/crates/serde).
+
+* `stable`: Ensures deterministic behaviour when node or edge
+            weights are distinguishable, but compare equal.
+
+To enable features `feature1`, `feature2` add the following to
+your Cargo.toml:
 ```toml
 [dependencies]
-nauty-pet = { version = "0.6", features = ["libc"] }
+nauty-pet = { version = "0.6", features = ["feature1", "feature2"] }
 ```
 
 License: Apache-2.0
