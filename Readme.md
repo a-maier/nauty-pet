@@ -53,7 +53,7 @@ To enable features `feature1`, `feature2` add the following to
 your Cargo.toml:
 ```toml
 [dependencies]
-nauty-pet = { version = "0.6", features = ["feature1", "feature2"] }
+nauty-pet = { version = "0.7", features = ["feature1", "feature2"] }
 ```
 
 License: Apache-2.0

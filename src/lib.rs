@@ -51,7 +51,7 @@
 //! your Cargo.toml:
 //! ```toml
 //! [dependencies]
-//! nauty-pet = { version = "0.6", features = ["feature1", "feature2"] }
+//! nauty-pet = { version = "0.7", features = ["feature1", "feature2"] }
 //! ```
 mod autom;
 pub mod canon;
