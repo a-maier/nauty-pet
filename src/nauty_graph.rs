@@ -19,21 +19,21 @@ use petgraph::{
 #[cfg(feature = "stable")]
 type HashMap<K, V> = indexmap::IndexMap<K, V, RandomState>;
 #[cfg(feature = "stable")]
-fn sort<T: Ord>(slice: &mut[T]) {
+fn sort<T: Ord>(slice: &mut [T]) {
     slice.sort()
 }
 #[cfg(feature = "stable")]
-fn sort_by<T: Ord, F>(slice: &mut[T], cmp: F)
+fn sort_by<T: Ord, F>(slice: &mut [T], cmp: F)
 where
-    F: FnMut(&T, &T) -> Ordering
+    F: FnMut(&T, &T) -> Ordering,
 {
     slice.sort_by(cmp)
 }
 #[cfg(feature = "stable")]
-fn sort_by_key<T, K, F>(slice: &mut[T], f: F)
+fn sort_by_key<T, K, F>(slice: &mut [T], f: F)
 where
     F: FnMut(&T) -> K,
-    K: Ord
+    K: Ord,
 {
     slice.sort_by_key(f)
 }
@@ -41,21 +41,21 @@ where
 #[cfg(not(feature = "stable"))]
 type HashMap<K, V> = ahash::AHashMap<K, V, RandomState>;
 #[cfg(not(feature = "stable"))]
-fn sort<T: Ord>(slice: &mut[T]) {
+fn sort<T: Ord>(slice: &mut [T]) {
     slice.sort_unstable()
 }
 #[cfg(not(feature = "stable"))]
-fn sort_by<T: Ord, F>(slice: &mut[T], cmp: F)
+fn sort_by<T: Ord, F>(slice: &mut [T], cmp: F)
 where
-    F: FnMut(&T, &T) -> Ordering
+    F: FnMut(&T, &T) -> Ordering,
 {
     slice.sort_unstable_by(cmp)
 }
 #[cfg(not(feature = "stable"))]
-fn sort_by_key<T, K, F>(slice: &mut[T], f: F)
+fn sort_by_key<T, K, F>(slice: &mut [T], f: F)
 where
     F: FnMut(&T) -> K,
-    K: Ord
+    K: Ord,
 {
     slice.sort_unstable_by_key(f)
 }
