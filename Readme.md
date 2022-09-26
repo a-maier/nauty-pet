@@ -7,9 +7,6 @@ find [canonical
 labellings](https://en.wikipedia.org/wiki/Graph_canonization) for
 [petgraph](https://github.com/petgraph/petgraph) graphs.
 
-Version 2.6 or 2.7 of the nauty and Traces library has to be
-installed separately before installing this crate.
-
 ## Example
 
 ```rust
