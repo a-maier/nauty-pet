@@ -51,7 +51,7 @@ pub type CanonUnGraph<N, E, Ix> = CanonGraph<N, E, Undirected, Ix>;
 /// graphs.insert(g);
 /// ```
 ///
-#[cfg_attr(feature = "serde-1", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Default)]
 pub struct CanonGraph<N, E, Ty: EdgeType = Directed, Ix: IndexType = DefaultIx>(
     Graph<N, E, Ty, Ix>,

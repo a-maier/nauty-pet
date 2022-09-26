@@ -16,10 +16,12 @@ indexmap = { version = "1.8", optional = true }
 itertools = "0.10"
 nauty-Traces-sys = "0.3"
 petgraph = "0.6"
+serde = { version = "1.0", features = ["derive"], optional = true }
 thiserror = "1.0"
 
 [features]
-serde-1 = ["petgraph/serde-1"]
+serde-1 = ["petgraph/serde-1", "serde/derive"]
+serde = ["serde-1"]
 stable = ["indexmap"]
 
 [dev-dependencies]
