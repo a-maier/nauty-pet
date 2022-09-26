@@ -7,7 +7,6 @@ use std::os::raw::c_int;
 use ahash::RandomState;
 use itertools::izip;
 use nauty_Traces_sys::{empty_graph, graph, ADDONEARC, SETWORDSNEEDED};
-#[cfg(feature = "libc")]
 use nauty_Traces_sys::{size_t, SparseGraph as NautySparse};
 
 use petgraph::{
@@ -60,7 +59,6 @@ where
     slice.sort_unstable_by_key(f)
 }
 
-#[cfg(feature = "libc")]
 #[derive(Debug, Default, Clone)]
 pub(crate) struct SparseGraph<N, E, D> {
     pub(crate) g: NautySparse,
@@ -91,7 +89,6 @@ struct RawGraphData<N, E, D> {
     adj: Vec<Vec<c_int>>,
     nodes: Nodes<N>,
     edges: HashMap<(usize, usize), Vec<E>>,
-    #[cfg(feature = "libc")]
     num_nauty_edges: usize,
     dir: PhantomData<D>,
 }
@@ -273,7 +270,6 @@ where
             lab,
             ptn,
         };
-        #[cfg(feature = "libc")]
         let num_nauty_edges = {
             let num_nauty_edges = edge_weights.len() + total_num_aux;
             if is_directed {
@@ -285,7 +281,6 @@ where
         Self {
             adj,
             edges: edge_weights,
-            #[cfg(feature = "libc")]
             num_nauty_edges,
             nodes,
             dir: PhantomData,
@@ -293,7 +288,6 @@ where
     }
 }
 
-#[cfg(feature = "libc")]
 impl<N, E, Ty> From<RawGraphData<N, E, Ty>> for SparseGraph<N, E, Ty>
 where
     Ty: EdgeType,
@@ -323,7 +317,6 @@ where
     }
 }
 
-#[cfg(feature = "libc")]
 impl<N, E, Ty, Ix> From<Graph<N, E, Ty, Ix>> for SparseGraph<(N, Vec<E>), E, Ty>
 where
     Ty: EdgeType,
@@ -449,7 +442,6 @@ where
     }
 }
 
-#[cfg(feature = "libc")]
 impl<N, E, Ty, Ix> From<SparseGraph<(N, Vec<E>), E, Ty>> for Graph<N, E, Ty, Ix>
 where
     Ty: EdgeType,
@@ -479,7 +471,6 @@ mod tests {
         let _ = env_logger::builder().is_test(true).try_init();
     }
 
-    #[cfg(feature = "libc")]
     fn tst_conv_sparse<N, E, Ty, Ix>(g: Graph<N, E, Ty, Ix>)
     where
         N: Clone + Debug + Ord,
@@ -510,7 +501,6 @@ mod tests {
         assert!(is_isomorphic(&g, &gg));
     }
 
-    #[cfg(feature = "libc")]
     #[test]
     fn simple_conversion_sparse() {
         log_init();
@@ -556,7 +546,6 @@ mod tests {
         ]));
     }
 
-    #[cfg(feature = "libc")]
     #[test]
     fn random_conversion_sparse_undirected() {
         log_init();
@@ -565,7 +554,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "libc")]
     #[test]
     fn random_conversion_sparse_directed() {
         log_init();

@@ -1,10 +1,8 @@
 use crate::error::NautyError;
 use crate::nauty_graph::DenseGraph;
-#[cfg(feature = "libc")]
 use crate::nauty_graph::SparseGraph;
 
 use std::cmp::Ord;
-#[cfg(feature = "libc")]
 use std::convert::Infallible;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -12,11 +10,9 @@ use std::hash::Hash;
 use nauty_Traces_sys::{
     densenauty, empty_graph, optionblk, statsblk, FALSE, MTOOBIG, NTOOBIG, TRUE,
 };
-#[cfg(feature = "libc")]
 use nauty_Traces_sys::{
     sparsegraph, sparsenauty, Traces, TracesOptions, TracesStats, SG_FREE,
 };
-#[cfg(feature = "libc")]
 use petgraph::graph::UnGraph;
 use petgraph::{
     graph::{Graph, IndexType},
@@ -38,17 +34,11 @@ pub trait TryIntoCanon {
 }
 
 /// Use sparse nauty to find the canonical labelling
-///
-/// Requires the `libc` feature
-#[cfg(any(feature = "libc", doc))]
 pub trait IntoCanonNautySparse {
     fn into_canon_nauty_sparse(self) -> Self;
 }
 
 /// Use sparse nauty to find the canonical labelling
-///
-/// Requires the `libc` feature
-#[cfg(any(feature = "libc", doc))]
 pub trait TryIntoCanonNautySparse {
     type Error;
 
@@ -72,17 +62,11 @@ pub trait TryIntoCanonNautyDense {
 }
 
 /// Use Traces to find the canonical labelling
-///
-/// Requires the `libc` feature
-#[cfg(any(feature = "libc", doc))]
 pub trait IntoCanonTraces {
     fn into_canon_traces(self) -> Self;
 }
 
 /// Use Traces to find the canonical labelling
-///
-/// Requires the `libc` feature
-#[cfg(any(feature = "libc", doc))]
 pub trait TryIntoCanonTraces {
     type Error;
 
@@ -113,7 +97,6 @@ where
     }
 }
 
-#[cfg(feature = "libc")]
 impl<N, E, Ty, Ix: IndexType> TryIntoCanonNautySparse for Graph<N, E, Ty, Ix>
 where
     N: Ord,
@@ -151,7 +134,6 @@ where
     }
 }
 
-#[cfg(feature = "libc")]
 impl<N, E, Ty, Ix> IntoCanonNautySparse for Graph<N, E, Ty, Ix>
 where
     Graph<N, E, Ty, Ix>: TryIntoCanonNautySparse,
@@ -219,7 +201,6 @@ where
     }
 }
 
-#[cfg(feature = "libc")]
 impl<N, E, Ix: IndexType> TryIntoCanonTraces for UnGraph<N, E, Ix>
 where
     N: Ord,
@@ -258,7 +239,6 @@ where
     }
 }
 
-#[cfg(feature = "libc")]
 impl<N, E, Ix> IntoCanonTraces for UnGraph<N, E, Ix>
 where
     UnGraph<N, E, Ix>: TryIntoCanonTraces,
@@ -321,7 +301,6 @@ mod tests {
         assert!(g1.is_identical(&g2));
     }
 
-    #[cfg(feature = "libc")]
     #[test]
     fn random_canon_nauty_sparse_undirected() {
         log_init();
@@ -344,7 +323,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "libc")]
     #[test]
     fn random_canon_nauty_sparse_directed() {
         log_init();
@@ -411,7 +389,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "libc")]
     #[test]
     fn random_canon_traces_undirected() {
         log_init();

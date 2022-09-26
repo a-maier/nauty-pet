@@ -36,10 +36,6 @@
 //!
 //! # Features
 //!
-//! * `libc`: Allows using sparse graphs for canonisation. Before
-//!           enabling this feature, ensure that the nauty and Traces
-//!           library is linked to the same C library as this crate.
-//!
 //! * `serde-1`: Enables serialisation of
 //!              [CanonGraph](graph::CanonGraph) objects using
 //!              [serde](https://crates.io/crates/serde).
@@ -62,7 +58,6 @@ mod nauty_graph;
 pub mod prelude;
 
 pub use canon::IntoCanon;
-#[cfg(feature = "libc")]
 pub use canon::{IntoCanonNautySparse, TryIntoCanonTraces};
 pub use cmp::IsIdentical;
 
