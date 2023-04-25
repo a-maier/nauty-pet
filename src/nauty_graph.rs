@@ -7,7 +7,7 @@ use std::os::raw::c_int;
 use ahash::RandomState;
 use itertools::izip;
 use nauty_Traces_sys::{empty_graph, graph, ADDONEARC, SETWORDSNEEDED};
-use nauty_Traces_sys::{size_t, SparseGraph as NautySparse};
+use nauty_Traces_sys::{SparseGraph as NautySparse};
 
 use petgraph::{
     graph::{Graph, IndexType},
@@ -304,7 +304,7 @@ where
             let start = vpos as usize;
             let end = start + *d as usize;
             sg.e[start..end].copy_from_slice(&adj);
-            vpos += *d as size_t
+            vpos += *d as usize
         }
         debug_assert!(sg.v.len() >= g.nodes.weights.len());
 
