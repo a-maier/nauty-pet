@@ -46,6 +46,9 @@
 //! [dependencies]
 //! nauty-pet = { version = "0.8", features = ["feature1", "feature2"] }
 //! ```
+
+#[macro_use] extern crate shrinkwraprs;
+
 mod autom;
 pub mod canon;
 mod cmp;
