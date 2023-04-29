@@ -560,7 +560,7 @@ impl<N: Ord, E: Ord, Ty: EdgeType, Ix: IndexType> Ord
                 .0
                 .edge_references()
                 .map(|e| (e.source(), e.target(), e.weight()));
-            let other_edges = self
+            let other_edges = other
                 .0
                 .edge_references()
                 .map(|e| (e.source(), e.target(), e.weight()));
@@ -586,7 +586,7 @@ where
                 .0
                 .edge_references()
                 .map(|e| (e.source(), e.target(), e.weight()));
-            let other_edges = self
+            let other_edges = other
                 .0
                 .edge_references()
                 .map(|e| (e.source(), e.target(), e.weight()));
@@ -605,6 +605,7 @@ mod tests {
     use rand::prelude::*;
     use rand_xoshiro::Xoshiro256Plus;
     use testing::{randomize_labels, GraphIter};
+    use petgraph::graph::{UnGraph, DiGraph};
 
     fn log_init() {
         let _ = env_logger::builder().is_test(true).try_init();
@@ -627,5 +628,14 @@ mod tests {
             debug!("Canonical graph (from randomised): {gg:#?}");
             assert_eq!(g, gg);
         }
+    }
+
+    #[test]
+    fn test_eq_ord() {
+        assert_eq!(CanonGraph::from(UnGraph::<(), ()>::from_edges([(0, 1), (1, 2)])), CanonGraph::from(UnGraph::<(), ()>::from_edges([(0, 1), (0, 2)])));
+        assert_ne!(CanonGraph::from(DiGraph::<(), ()>::from_edges([(0, 1), (1, 2)])), CanonGraph::from(DiGraph::<(), ()>::from_edges([(0, 1), (0, 2)])));
+
+        assert_eq!(CanonGraph::from(UnGraph::<(), ()>::from_edges([(0, 1), (1, 2)])).cmp(&CanonGraph::from(UnGraph::<(), ()>::from_edges([(0, 1), (0, 2)]))), Ordering::Equal);
+        assert_ne!(CanonGraph::from(DiGraph::<(), ()>::from_edges([(0, 1), (1, 2)])).cmp(&CanonGraph::from(DiGraph::<(), ()>::from_edges([(0, 1), (0, 2)]))), Ordering::Equal);
     }
 }
