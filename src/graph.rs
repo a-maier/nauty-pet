@@ -1,6 +1,7 @@
 use std::cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd};
 use std::convert::From;
 use std::hash::{Hash, Hasher};
+use std::ops::Deref;
 
 use crate::{IntoCanon, IsIdentical};
 
@@ -41,10 +42,22 @@ pub type CanonUnGraph<N, E, Ix> = CanonGraph<N, E, Undirected, Ix>;
 /// ```
 ///
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug, Default, Shrinkwrap)]
+#[derive(Clone, Debug, Default)]
 pub struct CanonGraph<N, E, Ty: EdgeType = Directed, Ix: IndexType = DefaultIx>(
     Graph<N, E, Ty, Ix>,
 );
+
+impl<N, E, Ty: EdgeType, Ix: IndexType> Deref for CanonGraph<N, E, Ty, Ix> {
+    type Target = Graph<N, E, Ty, Ix>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl<N, E, Ty: EdgeType, Ix: IndexType> AsRef<Graph<N, E, Ty, Ix>> for CanonGraph<N, E, Ty, Ix> {
+    fn as_ref(&self) -> &Graph<N, E, Ty, Ix> {
+        &self.0
+    }
+}
 
 impl<N, E, Ty, Ix> CanonGraph<N, E, Ty, Ix>
 where
