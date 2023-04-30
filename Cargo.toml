@@ -12,7 +12,7 @@ repository = "https://github.com/a-maier/nauty-pet"
 
 [dependencies]
 ahash = "0.8"
-indexmap = { version = "1.8", optional = true }
+indexmap = { version = "1.9", optional = true }
 itertools = "0.10"
 nauty-Traces-sys = "0.5"
 petgraph = "0.6"
