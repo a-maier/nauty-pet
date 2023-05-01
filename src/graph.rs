@@ -127,7 +127,7 @@ where
     Ix: IndexType,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.is_identical(&other)
+        self.is_identical(other)
     }
 }
 impl<N: Eq, E: Eq, Ty: EdgeType, Ix: IndexType> Eq

@@ -301,7 +301,7 @@ where
         for (adj, d, v) in izip!(adj, &mut sg.d, &mut sg.v) {
             *d = adj.len() as c_int;
             *v = vpos;
-            let start = vpos as usize;
+            let start = vpos;
             let end = start + *d as usize;
             sg.e[start..end].copy_from_slice(&adj);
             vpos += *d as usize
@@ -400,7 +400,7 @@ where
         Vec::from_iter(izip!(relabel.iter().copied(), node_weights));
     sort_by_key(&mut node_weights, |e| e.0);
     for (n, i) in node_weights.iter().map(|(i, _w)| i).enumerate() {
-        debug_assert_eq!(n, *i as usize)
+        debug_assert_eq!(n, *i)
     }
     for (_, (w, loops)) in node_weights {
         for w in loops {
@@ -411,8 +411,8 @@ where
 
     // edges
     for ((source, target), weights) in edge_weights {
-        let mut source = relabel[source as usize];
-        let mut target = relabel[target as usize];
+        let mut source = relabel[source];
+        let mut target = relabel[target];
         if !is_directed && source > target {
             std::mem::swap(&mut source, &mut target);
         }
@@ -423,8 +423,8 @@ where
     sort(&mut edges);
     for (source, target, weight) in edges {
         use petgraph::visit::NodeIndexable;
-        let source = res.from_index(source as usize);
-        let target = res.from_index(target as usize);
+        let source = res.from_index(source);
+        let target = res.from_index(target);
         res.add_edge(source, target, weight);
     }
 
