@@ -53,7 +53,9 @@ impl<N, E, Ty: EdgeType, Ix: IndexType> Deref for CanonGraph<N, E, Ty, Ix> {
         &self.0
     }
 }
-impl<N, E, Ty: EdgeType, Ix: IndexType> AsRef<Graph<N, E, Ty, Ix>> for CanonGraph<N, E, Ty, Ix> {
+impl<N, E, Ty: EdgeType, Ix: IndexType> AsRef<Graph<N, E, Ty, Ix>>
+    for CanonGraph<N, E, Ty, Ix>
+{
     fn as_ref(&self) -> &Graph<N, E, Ty, Ix> {
         &self.0
     }
@@ -199,10 +201,10 @@ mod tests {
     use super::*;
 
     use log::debug;
+    use petgraph::graph::{DiGraph, UnGraph};
     use rand::prelude::*;
     use rand_xoshiro::Xoshiro256Plus;
     use testing::{randomize_labels, GraphIter};
-    use petgraph::graph::{UnGraph, DiGraph};
 
     fn log_init() {
         let _ = env_logger::builder().is_test(true).try_init();
@@ -229,10 +231,30 @@ mod tests {
 
     #[test]
     fn test_eq_ord() {
-        assert_eq!(CanonGraph::from(UnGraph::<(), ()>::from_edges([(0, 1), (1, 2)])), CanonGraph::from(UnGraph::<(), ()>::from_edges([(0, 1), (0, 2)])));
-        assert_ne!(CanonGraph::from(DiGraph::<(), ()>::from_edges([(0, 1), (1, 2)])), CanonGraph::from(DiGraph::<(), ()>::from_edges([(0, 1), (0, 2)])));
+        assert_eq!(
+            CanonGraph::from(UnGraph::<(), ()>::from_edges([(0, 1), (1, 2)])),
+            CanonGraph::from(UnGraph::<(), ()>::from_edges([(0, 1), (0, 2)]))
+        );
+        assert_ne!(
+            CanonGraph::from(DiGraph::<(), ()>::from_edges([(0, 1), (1, 2)])),
+            CanonGraph::from(DiGraph::<(), ()>::from_edges([(0, 1), (0, 2)]))
+        );
 
-        assert_eq!(CanonGraph::from(UnGraph::<(), ()>::from_edges([(0, 1), (1, 2)])).cmp(&CanonGraph::from(UnGraph::<(), ()>::from_edges([(0, 1), (0, 2)]))), Ordering::Equal);
-        assert_ne!(CanonGraph::from(DiGraph::<(), ()>::from_edges([(0, 1), (1, 2)])).cmp(&CanonGraph::from(DiGraph::<(), ()>::from_edges([(0, 1), (0, 2)]))), Ordering::Equal);
+        assert_eq!(
+            CanonGraph::from(UnGraph::<(), ()>::from_edges([(0, 1), (1, 2)]))
+                .cmp(&CanonGraph::from(UnGraph::<(), ()>::from_edges([
+                    (0, 1),
+                    (0, 2)
+                ]))),
+            Ordering::Equal
+        );
+        assert_ne!(
+            CanonGraph::from(DiGraph::<(), ()>::from_edges([(0, 1), (1, 2)]))
+                .cmp(&CanonGraph::from(DiGraph::<(), ()>::from_edges([
+                    (0, 1),
+                    (0, 2)
+                ]))),
+            Ordering::Equal
+        );
     }
 }

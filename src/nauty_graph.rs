@@ -6,8 +6,8 @@ use std::os::raw::c_int;
 
 use ahash::RandomState;
 use itertools::izip;
+use nauty_Traces_sys::SparseGraph as NautySparse;
 use nauty_Traces_sys::{empty_graph, graph, ADDONEARC, SETWORDSNEEDED};
-use nauty_Traces_sys::{SparseGraph as NautySparse};
 
 use petgraph::{
     graph::{Graph, IndexType},
