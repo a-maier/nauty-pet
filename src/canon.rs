@@ -109,7 +109,11 @@ where
         if self.node_count() == 0 {
             return Ok(self);
         }
-        let mut options = optionblk::default_sparse();
+        let mut options = if self.is_directed() {
+            optionblk::default_sparse_digraph()
+        } else {
+            optionblk::default_sparse()
+        };
         options.getcanon = TRUE;
         options.defaultptn = FALSE;
         options.digraph = if self.is_directed() { TRUE } else { FALSE };
@@ -159,12 +163,14 @@ where
         if self.node_count() == 0 {
             return Ok(self);
         }
-        let mut options = optionblk {
-            getcanon: TRUE,
-            defaultptn: FALSE,
-            digraph: if self.is_directed() { TRUE } else { FALSE },
-            ..Default::default()
+        let mut options = if self.is_directed() {
+            optionblk::default_digraph()
+        } else {
+            optionblk::default()
         };
+        options.getcanon = TRUE;
+        options.defaultptn = FALSE;
+        options.digraph = if self.is_directed() { TRUE } else { FALSE };
         let mut stats = statsblk::default();
         let mut dg = DenseGraph::from(self);
         let mut orbits = vec![0; dg.n];

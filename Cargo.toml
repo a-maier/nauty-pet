@@ -14,7 +14,7 @@ repository = "https://github.com/a-maier/nauty-pet"
 ahash = "0.8"
 indexmap = { version = "1.9", optional = true }
 itertools = "0.10"
-nauty-Traces-sys = "0.5"
+nauty-Traces-sys = "0.6"
 petgraph = "0.6"
 serde = { version = "1.0", features = ["derive"], optional = true }
 thiserror = "1.0"
@@ -25,7 +25,7 @@ serde = ["serde-1"]
 stable = ["indexmap"]
 
 [dev-dependencies]
-criterion = "0.4"
+criterion = "0.5"
 env_logger = "0.10"
 log = "0.4"
 rand = "0.8"
