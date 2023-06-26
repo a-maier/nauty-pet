@@ -157,6 +157,9 @@ where
                 edge_weights.entry(edge).or_default().push(wt);
             }
         }
+        for v in &mut node_weights {
+            sort(&mut v.1);
+        }
         for v in edge_weights.values_mut() {
             sort(v);
         }
