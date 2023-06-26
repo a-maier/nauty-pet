@@ -201,7 +201,7 @@ mod tests {
     use super::*;
 
     use log::debug;
-    use petgraph::graph::{DiGraph, UnGraph};
+    use petgraph::{graph::{DiGraph, UnGraph}, visit::NodeIndexable};
     use rand::prelude::*;
     use rand_xoshiro::Xoshiro256Plus;
     use testing::{randomize_labels, GraphIter};
@@ -256,5 +256,45 @@ mod tests {
                 ]))),
             Ordering::Equal
         );
+    }
+
+    #[test]
+    fn idempotence_simple() {
+        log_init();
+
+        const N: usize = 2;
+
+        let mut g = UnGraph::<(), i32>::with_capacity(N, 6);
+        for _ in 0..N {
+            g.add_node(());
+        }
+        let i = Vec::from_iter((0..N).map(|i| g.from_index(i)));
+        g.add_edge(i[0], i[1], 1);
+        g.add_edge(i[1], i[0], 0);
+        g.add_edge(i[0], i[0], 1);
+        g.add_edge(i[1], i[1], 1);
+        g.add_edge(i[0], i[0], 0);
+        g.add_edge(i[1], i[0], 1);
+        let canon = CanonGraph::from(g.clone());
+
+        // canonising again should give the same graph
+        let canon2 = CanonGraph::from(UnGraph::from(canon.clone()));
+        assert_eq!(canon, canon2);
+    }
+
+    #[test]
+    fn idempotence_random() {
+        log_init();
+
+        let graphs = GraphIter::<Undirected>::default();
+
+        for g in graphs.take(1000) {
+            debug!("Initial graph: {g:#?}");
+            let g = CanonGraph::from(g);
+            debug!("Canonical graph: {g:#?}");
+            let gg = CanonGraph::from(UnGraph::from(g.clone()));
+            debug!("Canonical^2 graph: {gg:#?}");
+            assert_eq!(g, gg);
+        }
     }
 }
