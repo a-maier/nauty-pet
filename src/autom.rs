@@ -16,9 +16,25 @@ use petgraph::{
     EdgeType,
 };
 
+#[deprecated(note = "use `TryIntoAutomStats` instead")]
+pub trait TryIntoAutom {
+    type Error;
+
+    fn try_into_autom(self) -> Result<AutomStats, Self::Error>;
+}
+
+#[allow(deprecated)]
+impl<T: TryIntoAutomStats> TryIntoAutom for T {
+    type Error = <T as TryIntoAutomStats>::Error;
+
+    fn try_into_autom(self) -> Result<AutomStats, Self::Error> {
+        self.try_into_autom_stats()
+    }
+}
+
 /// Information on automorphism group of a graph
 #[derive(Copy, Clone, PartialEq, PartialOrd, Debug, Default)]
-pub struct Autom {
+pub struct AutomStats {
     /// The size of the automorphism group is approximately `grpsize_base` * 10.pow(`grpsize_exp`)
     pub grpsize_base: f64,
     /// The size of the automorphism group is approximately `grpsize_base` * 10.pow(`grpsize_exp`)
@@ -29,13 +45,13 @@ pub struct Autom {
     pub num_generators: u32,
 }
 
-impl Autom {
+impl AutomStats {
     pub fn grpsize(&self) -> f64 {
         self.grpsize_base * 10f64.powi(self.grpsize_exp as i32)
     }
 }
 
-impl From<TracesStats> for Autom {
+impl From<TracesStats> for AutomStats {
     fn from(o: TracesStats) -> Self {
         Self {
             grpsize_base: o.grpsize1,
@@ -46,7 +62,7 @@ impl From<TracesStats> for Autom {
     }
 }
 
-impl From<statsblk> for Autom {
+impl From<statsblk> for AutomStats {
     fn from(o: statsblk) -> Self {
         Self {
             grpsize_base: o.grpsize1,
@@ -57,35 +73,35 @@ impl From<statsblk> for Autom {
     }
 }
 
-/// Analyse a graph's automorphism group
-pub trait TryIntoAutom {
+/// Statistics for a graph's automorphism group
+pub trait TryIntoAutomStats {
     type Error;
 
-    fn try_into_autom(self) -> Result<Autom, Self::Error>;
+    fn try_into_autom_stats(self) -> Result<AutomStats, Self::Error>;
 }
 
-/// Analyse a graph's automorphism group using sparse nauty
-pub trait TryIntoAutomNautySparse {
+/// Statistics for a graph's automorphism group using sparse nauty
+pub trait TryIntoAutomStatsNautySparse {
     type Error;
 
-    fn try_into_autom_nauty_sparse(self) -> Result<Autom, Self::Error>;
+    fn try_into_autom_stats_nauty_sparse(self) -> Result<AutomStats, Self::Error>;
 }
 
-/// Analyse a graph's automorphism group using dense nauty
-pub trait TryIntoAutomNautyDense {
+/// Statistics for a graph's automorphism group using dense nauty
+pub trait TryIntoAutomStatsNautyDense {
     type Error;
 
-    fn try_into_autom_nauty_dense(self) -> Result<Autom, Self::Error>;
+    fn try_into_autom_stats_nauty_dense(self) -> Result<AutomStats, Self::Error>;
 }
 
-/// Analyse a graph's automorphism group using Traces
-pub trait TryIntoAutomTraces {
+/// Statistics for a graph's automorphism group using Traces
+pub trait TryIntoAutomStatsTraces {
     type Error;
 
-    fn try_into_autom_traces(self) -> Result<Autom, Self::Error>;
+    fn try_into_autom_stats_traces(self) -> Result<AutomStats, Self::Error>;
 }
 
-impl<N, E, Ty, Ix> TryIntoAutom for Graph<N, E, Ty, Ix>
+impl<N, E, Ty, Ix> TryIntoAutomStats for Graph<N, E, Ty, Ix>
 where
     N: Ord,
     E: Hash + Ord,
@@ -94,12 +110,12 @@ where
 {
     type Error = NautyError;
 
-    fn try_into_autom(self) -> Result<Autom, Self::Error> {
-        self.try_into_autom_nauty_dense()
+    fn try_into_autom_stats(self) -> Result<AutomStats, Self::Error> {
+        self.try_into_autom_stats_nauty_dense()
     }
 }
 
-impl<N, E, Ty, Ix> TryIntoAutomNautySparse for Graph<N, E, Ty, Ix>
+impl<N, E, Ty, Ix> TryIntoAutomStatsNautySparse for Graph<N, E, Ty, Ix>
 where
     N: Ord,
     E: Hash + Ord,
@@ -108,7 +124,7 @@ where
 {
     type Error = Infallible;
 
-    fn try_into_autom_nauty_sparse(self) -> Result<Autom, Self::Error> {
+    fn try_into_autom_stats_nauty_sparse(self) -> Result<AutomStats, Self::Error> {
         let mut options = optionblk::default_sparse();
         options.getcanon = FALSE;
         options.defaultptn = FALSE;
@@ -132,7 +148,7 @@ where
     }
 }
 
-impl<N, E, Ty, Ix> TryIntoAutomNautyDense for Graph<N, E, Ty, Ix>
+impl<N, E, Ty, Ix> TryIntoAutomStatsNautyDense for Graph<N, E, Ty, Ix>
 where
     N: Ord,
     E: Hash + Ord,
@@ -141,7 +157,7 @@ where
 {
     type Error = NautyError;
 
-    fn try_into_autom_nauty_dense(self) -> Result<Autom, Self::Error> {
+    fn try_into_autom_stats_nauty_dense(self) -> Result<AutomStats, Self::Error> {
         use ::std::os::raw::c_int;
         use NautyError::*;
 
@@ -176,7 +192,7 @@ where
     }
 }
 
-impl<N, E, Ty, Ix> TryIntoAutomTraces for Graph<N, E, Ty, Ix>
+impl<N, E, Ty, Ix> TryIntoAutomStatsTraces for Graph<N, E, Ty, Ix>
 where
     N: Ord,
     E: Hash + Ord,
@@ -185,7 +201,7 @@ where
 {
     type Error = Infallible;
 
-    fn try_into_autom_traces(self) -> Result<Autom, Self::Error> {
+    fn try_into_autom_stats_traces(self) -> Result<AutomStats, Self::Error> {
         let mut options = TracesOptions {
             getcanon: FALSE,
             defaultptn: FALSE,
@@ -226,16 +242,16 @@ mod tests {
 
         use petgraph::visit::NodeIndexable;
         let g = DiGraph::<u8, ()>::from_edges([(0, 1)]);
-        let autom = g.clone().try_into_autom().unwrap();
+        let autom = g.clone().try_into_autom_stats().unwrap();
         assert_eq!(autom.grpsize_base, 1.);
         assert_eq!(autom.grpsize_exp, 0);
         let g = g.into_edge_type::<Undirected>();
-        let autom = g.clone().try_into_autom().unwrap();
+        let autom = g.clone().try_into_autom_stats().unwrap();
         assert_eq!(autom.grpsize_base, 2.);
         assert_eq!(autom.grpsize_exp, 0);
         let mut g = g;
         *g.node_weight_mut(g.from_index(0)).unwrap() = 2;
-        let autom = g.clone().try_into_autom().unwrap();
+        let autom = g.clone().try_into_autom_stats().unwrap();
         assert_eq!(autom.grpsize_base, 1.);
         assert_eq!(autom.grpsize_exp, 0);
     }
@@ -246,16 +262,16 @@ mod tests {
 
         use petgraph::visit::EdgeIndexable;
         let g = DiGraph::<(), u8>::from_edges([(0, 1), (1, 2), (2, 0)]);
-        let autom = g.clone().try_into_autom().unwrap();
+        let autom = g.clone().try_into_autom_stats().unwrap();
         assert_eq!(autom.grpsize_base, 3.);
         assert_eq!(autom.grpsize_exp, 0);
         let g = g.into_edge_type::<Undirected>();
-        let autom = g.clone().try_into_autom().unwrap();
+        let autom = g.clone().try_into_autom_stats().unwrap();
         assert_eq!(autom.grpsize_base, 6.);
         assert_eq!(autom.grpsize_exp, 0);
         let mut g = g;
         *g.edge_weight_mut(g.from_index(0)).unwrap() = 2;
-        let autom = g.clone().try_into_autom().unwrap();
+        let autom = g.clone().try_into_autom_stats().unwrap();
         assert_eq!(autom.grpsize_base, 2.);
         assert_eq!(autom.grpsize_exp, 0);
     }
