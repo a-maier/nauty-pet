@@ -46,6 +46,7 @@ pub struct AutomStats {
 }
 
 impl AutomStats {
+    /// The size of the automorphism group
     pub fn grpsize(&self) -> f64 {
         self.grpsize_base * 10f64.powi(self.grpsize_exp as i32)
     }
