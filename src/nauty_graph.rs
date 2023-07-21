@@ -1,4 +1,5 @@
 use std::cmp::{Ord, Ordering};
+use std::fmt::Debug;
 use std::convert::From;
 use std::hash::Hash;
 use std::marker::PhantomData;
@@ -85,12 +86,13 @@ pub(crate) struct Nodes<N> {
 }
 
 #[derive(Debug, Default, Clone)]
-struct RawGraphData<N, E, D> {
+pub(crate) struct RawGraphData<N, E, D> {
     adj: Vec<Vec<c_int>>,
     nodes: Nodes<N>,
     edges: HashMap<(usize, usize), Vec<E>>,
     num_nauty_edges: usize,
     dir: PhantomData<D>,
+    pub(crate) relabel: Vec<usize>,
 }
 
 fn relabel_to_contiguous_node_weights<N: Ord>(nodes: &mut [N]) -> Vec<usize> {
@@ -107,7 +109,7 @@ fn relabel_to_contiguous_node_weights<N: Ord>(nodes: &mut [N]) -> Vec<usize> {
     renumber
 }
 
-fn apply_perm<T>(slice: &mut [T], mut new_pos: Vec<usize>) {
+pub(crate) fn apply_perm<T>(slice: &mut [T], mut new_pos: Vec<usize>) {
     const CORRECT_POS: usize = usize::MAX;
     for idx in 0..slice.len() {
         let mut next_idx = new_pos[idx];
@@ -286,6 +288,7 @@ where
             edges: edge_weights,
             num_nauty_edges,
             nodes,
+            relabel,
             dir: PhantomData,
         }
     }
@@ -374,10 +377,15 @@ where
     }
 }
 
-fn inv_perm(perm: &[c_int]) -> Vec<usize> {
+pub(crate) fn inv_perm<I>(perm: &[I]) -> Vec<usize>
+where
+    I: Copy + TryInto<usize>,
+    <I as TryInto<usize>>::Error: Debug,
+{
     let mut relabel = vec![0; perm.len()];
     for (new, &old) in perm.iter().enumerate() {
-        relabel[old as usize] = new;
+        let old = old.try_into().unwrap();
+        relabel[old] = new;
     }
     relabel
 }
