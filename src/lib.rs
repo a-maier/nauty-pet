@@ -2,8 +2,10 @@
 //!
 //! Leverages [nauty and Traces](http://pallini.di.uniroma1.it/) to
 //! find [canonical
-//! labellings](https://en.wikipedia.org/wiki/Graph_canonization) for
-//! [petgraph](https://github.com/petgraph/petgraph) graphs.
+//! labellings](https://en.wikipedia.org/wiki/Graph_canonization) and
+//! [graph
+//! automorphisms](https://en.wikipedia.org/wiki/Graph_automorphism)
+//! for [petgraph](https://github.com/petgraph/petgraph) graphs.
 //!
 //! # Example
 //!
@@ -15,10 +17,6 @@
 //! let g1 = UnGraph::<(), ()>::from_edges([(0, 1), (1, 2)]);
 //! let g2 = UnGraph::<(), ()>::from_edges([(0, 1), (0, 2)]);
 //!
-//! // There are two equivalent labellings
-//! let automorphism_info = g1.clone().try_into_autom().unwrap();
-//! assert_eq!(automorphism_info.grpsize(), 2.);
-//!
 //! // The canonical forms are identical
 //! let c1 = g1.clone().into_canon();
 //! let c2 = g2.clone().into_canon();
@@ -26,9 +24,15 @@
 //!
 //! // Alternatively, we can use a dedicated `struct` for canonically
 //! // labelled graphs
-//! let c1 = CanonGraph::from(g1);
+//! let c1 = CanonGraph::from(g1.clone());
 //! let c2 = CanonGraph::from(g2);
 //! assert_eq!(c1, c2);
+//!
+//! // `g1` is invariant under the permutation 0 -> 2, 1 -> 1, 2 -> 0.
+//! // we encode it as the vector `[2, 1, 0]`
+//! let automorphisms = g1.try_into_autom_group().unwrap();
+//! assert!(automorphisms.contains(&vec![2, 1, 0]));
+//!
 //! ```
 //!
 //! # Features
