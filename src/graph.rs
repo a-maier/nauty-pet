@@ -201,7 +201,10 @@ mod tests {
     use super::*;
 
     use log::debug;
-    use petgraph::{graph::{DiGraph, UnGraph}, visit::NodeIndexable};
+    use petgraph::{
+        graph::{DiGraph, UnGraph},
+        visit::NodeIndexable,
+    };
     use rand::prelude::*;
     use rand_xoshiro::Xoshiro256Plus;
     use testing::{randomize_labels, GraphIter};

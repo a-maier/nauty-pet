@@ -9,10 +9,10 @@ use std::os::raw::c_int;
 use std::slice;
 
 use crate::error::NautyError;
+use crate::nauty_graph::inv_perm;
 use crate::nauty_graph::DenseGraph;
 use crate::nauty_graph::RawGraphData;
 use crate::nauty_graph::SparseGraph;
-use crate::nauty_graph::inv_perm;
 
 use nauty_Traces_sys::allgroup;
 use nauty_Traces_sys::groupautomproc;
@@ -62,14 +62,18 @@ pub trait TryIntoAutomGroup {
 pub trait TryIntoAutomGroupNautySparse {
     type Error;
 
-    fn try_into_autom_group_nauty_sparse(self) -> Result<AutomGroup, Self::Error>;
+    fn try_into_autom_group_nauty_sparse(
+        self,
+    ) -> Result<AutomGroup, Self::Error>;
 }
 
 /// Determine all elements of a graph's automorphism group using dense nauty
 pub trait TryIntoAutomGroupNautyDense {
     type Error;
 
-    fn try_into_autom_group_nauty_dense(self) -> Result<AutomGroup, Self::Error>;
+    fn try_into_autom_group_nauty_dense(
+        self,
+    ) -> Result<AutomGroup, Self::Error>;
 }
 
 impl<N, E, Ty, Ix> TryIntoAutomGroup for Graph<N, E, Ty, Ix>
@@ -95,7 +99,9 @@ where
 {
     type Error = Infallible;
 
-    fn try_into_autom_group_nauty_sparse(self) -> Result<AutomGroup, Self::Error> {
+    fn try_into_autom_group_nauty_sparse(
+        self,
+    ) -> Result<AutomGroup, Self::Error> {
         let mut options = optionblk::default_sparse();
         options.getcanon = FALSE;
         options.defaultptn = FALSE;
@@ -139,7 +145,9 @@ where
 {
     type Error = NautyError;
 
-    fn try_into_autom_group_nauty_dense(self) -> Result<AutomGroup, Self::Error> {
+    fn try_into_autom_group_nauty_dense(
+        self,
+    ) -> Result<AutomGroup, Self::Error> {
         use NautyError::*;
 
         let mut options = optionblk {
@@ -178,7 +186,7 @@ where
                 let res = AUTOM_GROUP.with(|g| g.take());
                 let res = undo_vertex_relabelling(res, &relabel);
                 Ok(AutomGroup(res))
-            },
+            }
             MTOOBIG => Err(MTooBig),
             NTOOBIG => Err(NTooBig),
             _ => unreachable!(),
@@ -285,14 +293,18 @@ pub trait TryIntoAutomStats {
 pub trait TryIntoAutomStatsNautySparse {
     type Error;
 
-    fn try_into_autom_stats_nauty_sparse(self) -> Result<AutomStats, Self::Error>;
+    fn try_into_autom_stats_nauty_sparse(
+        self,
+    ) -> Result<AutomStats, Self::Error>;
 }
 
 /// Statistics for a graph's automorphism group using dense nauty
 pub trait TryIntoAutomStatsNautyDense {
     type Error;
 
-    fn try_into_autom_stats_nauty_dense(self) -> Result<AutomStats, Self::Error>;
+    fn try_into_autom_stats_nauty_dense(
+        self,
+    ) -> Result<AutomStats, Self::Error>;
 }
 
 /// Statistics for a graph's automorphism group using Traces
@@ -325,7 +337,9 @@ where
 {
     type Error = Infallible;
 
-    fn try_into_autom_stats_nauty_sparse(self) -> Result<AutomStats, Self::Error> {
+    fn try_into_autom_stats_nauty_sparse(
+        self,
+    ) -> Result<AutomStats, Self::Error> {
         let mut options = optionblk::default_sparse();
         options.getcanon = FALSE;
         options.defaultptn = FALSE;
@@ -358,7 +372,9 @@ where
 {
     type Error = NautyError;
 
-    fn try_into_autom_stats_nauty_dense(self) -> Result<AutomStats, Self::Error> {
+    fn try_into_autom_stats_nauty_dense(
+        self,
+    ) -> Result<AutomStats, Self::Error> {
         use NautyError::*;
 
         let mut options = optionblk {
@@ -433,7 +449,7 @@ mod tests {
 
     use super::*;
     use log::debug;
-    use petgraph::{graph::DiGraph, Undirected, Directed, visit::EdgeRef};
+    use petgraph::{graph::DiGraph, visit::EdgeRef, Directed, Undirected};
     use testing::GraphIter;
 
     fn log_init() {
@@ -509,14 +525,17 @@ mod tests {
         let g = g.into_edge_type::<Undirected>();
         let mut autom = g.clone().try_into_autom_group().unwrap();
         autom.sort();
-        assert_eq!(autom.0, [
-            [0, 1, 2],
-            [0, 2, 1],
-            [1, 0, 2],
-            [1, 2, 0],
-            [2, 0, 1],
-            [2, 1, 0],
-        ]);
+        assert_eq!(
+            autom.0,
+            [
+                [0, 1, 2],
+                [0, 2, 1],
+                [1, 0, 2],
+                [1, 2, 0],
+                [2, 0, 1],
+                [2, 1, 0],
+            ]
+        );
         let mut g = g;
         {
             use petgraph::visit::EdgeIndexable;
@@ -525,10 +544,7 @@ mod tests {
         debug!("{g:#?}");
         let mut autom = g.clone().try_into_autom_group().unwrap();
         autom.sort();
-        assert_eq!(autom.0, [
-            [0, 1, 2],
-            [1, 0, 2],
-        ]);
+        assert_eq!(autom.0, [[0, 1, 2], [1, 0, 2],]);
         {
             use petgraph::visit::EdgeIndexable;
             *g.edge_weight_mut(g.from_index(0)).unwrap() = 0;
@@ -540,10 +556,7 @@ mod tests {
         debug!("{g:#?}");
         let mut autom = g.clone().try_into_autom_group().unwrap();
         autom.sort();
-        assert_eq!(autom.0, [
-            [0, 1, 2],
-            [0, 2, 1],
-        ]);
+        assert_eq!(autom.0, [[0, 1, 2], [0, 2, 1],]);
     }
 
     #[test]
@@ -620,7 +633,7 @@ mod tests {
 
     fn apply_perm<N, E, Ty: EdgeType, Ix: IndexType>(
         g: Graph<N, E, Ty, Ix>,
-        perm: Vec<usize>
+        perm: Vec<usize>,
     ) -> Graph<N, E, Ty, Ix> {
         use petgraph::visit::NodeIndexable;
 
@@ -638,7 +651,11 @@ mod tests {
         }
         let edges = edges.into_iter().zip(edge_wts.into_iter());
         for ((source, target), w) in edges {
-            res.add_edge(res.from_index(source), res.from_index(target), w.weight);
+            res.add_edge(
+                res.from_index(source),
+                res.from_index(target),
+                w.weight,
+            );
         }
         res
     }

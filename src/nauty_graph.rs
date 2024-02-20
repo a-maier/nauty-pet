@@ -1,6 +1,6 @@
 use std::cmp::{Ord, Ordering};
-use std::fmt::Debug;
 use std::convert::From;
+use std::fmt::Debug;
 use std::hash::Hash;
 use std::marker::PhantomData;
 use std::os::raw::c_int;
