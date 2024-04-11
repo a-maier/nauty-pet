@@ -10,6 +10,7 @@ impl<N: PartialEq, E: PartialEq, Ty: EdgeType, Ix: IndexType> IsIdentical
 {
     fn is_identical(&self, other: &Self) -> bool {
         self.node_weights().eq(other.node_weights())
+            && self.edge_count() == other.edge_count()
             && self.edge_references().zip(other.edge_references()).all(
                 |(e1, e2)| {
                     e1.source() == e2.source()
@@ -31,6 +32,13 @@ mod tests {
         let g2 = UnGraph::<(), ()>::from_edges([(0, 1), (1, 2)]);
         assert!(g1.is_identical(&g1));
         assert!(g2.is_identical(&g2));
+        assert!(!g1.is_identical(&g2));
+    }
+
+    #[test]
+    fn ident_edge_num() {
+        let g1 = UnGraph::<(), ()>::from_edges([(0, 1), (0, 2)]);
+        let g2 = UnGraph::<(), ()>::from_edges([(0, 1), (0, 2), (0, 2)]);
         assert!(!g1.is_identical(&g2));
     }
 
