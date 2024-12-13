@@ -221,7 +221,7 @@ extern "C" fn store_perm(p: *mut c_int, n: i32) {
 }
 
 thread_local! {
-    static AUTOM_GROUP: RefCell<Vec<Vec<c_int>>> = RefCell::new(Vec::new());
+    static AUTOM_GROUP: RefCell<Vec<Vec<c_int>>> = const { RefCell::new(Vec::new()) };
 }
 
 #[deprecated(note = "use `TryIntoAutomStats` instead")]
@@ -649,7 +649,7 @@ mod tests {
         for node in nodes {
             res.add_node(node);
         }
-        let edges = edges.into_iter().zip(edge_wts.into_iter());
+        let edges = edges.into_iter().zip(edge_wts);
         for ((source, target), w) in edges {
             res.add_edge(
                 res.from_index(source),
