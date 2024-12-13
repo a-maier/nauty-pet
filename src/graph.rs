@@ -42,10 +42,16 @@ pub type CanonUnGraph<N, E, Ix> = CanonGraph<N, E, Undirected, Ix>;
 /// ```
 ///
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct CanonGraph<N, E, Ty: EdgeType = Directed, Ix: IndexType = DefaultIx>(
     Graph<N, E, Ty, Ix>,
 );
+
+impl<N, E, Ty: EdgeType, Ix: IndexType> Default for CanonGraph<N, E, Ty, Ix> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
 
 impl<N, E, Ty: EdgeType, Ix: IndexType> Deref for CanonGraph<N, E, Ty, Ix> {
     type Target = Graph<N, E, Ty, Ix>;
