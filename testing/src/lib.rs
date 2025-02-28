@@ -7,7 +7,7 @@ use petgraph::{
     visit::EdgeRef,
 };
 use rand::{
-    distributions::Uniform,
+    distr::Uniform,
     prelude::*
 };
 use rand_distr::Normal;
@@ -26,9 +26,9 @@ impl<Ty: EdgeType> Default for GraphIter<Ty> {
     fn default() -> Self {
         Self {
             rng: Xoshiro256Plus::seed_from_u64(0),
-            node_distr: Uniform::from(1..10),
-            node_wt_distr: Uniform::from(0..3),
-            edge_wt_distr: Uniform::from(0..3),
+            node_distr: Uniform::try_from(1..10).unwrap(),
+            node_wt_distr: Uniform::try_from(0..3).unwrap(),
+            edge_wt_distr: Uniform::try_from(0..3).unwrap(),
             edge_distr: Normal::new(0., 1.0).unwrap(),
             edge_type: PhantomData
         }
