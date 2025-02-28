@@ -12,12 +12,12 @@ repository = "https://github.com/a-maier/nauty-pet"
 
 [dependencies]
 ahash = "0.8"
-indexmap = { version = "2.2", optional = true }
-itertools = "0.12"
-nauty-Traces-sys = "0.7"
+indexmap = { version = "2.7", optional = true }
+itertools = "0.14"
+nauty-Traces-sys = "0.9"
 petgraph = "0.6"
 serde = { version = "1.0", features = ["derive"], optional = true }
-thiserror = "1.0"
+thiserror = "2.0"
 
 [features]
 serde-1 = ["petgraph/serde-1", "serde/derive"]
