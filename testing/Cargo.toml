@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-petgraph = "0.6"
+petgraph = "0.7"
 rand = "0.9"
 rand_distr = "0.5"
 rand_xoshiro = "0.7"
