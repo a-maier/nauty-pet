@@ -1,4 +1,4 @@
-use petgraph::{graph::IndexType, visit::EdgeRef, EdgeType, Graph};
+use petgraph::{EdgeType, Graph, graph::IndexType, visit::EdgeRef};
 
 /// Check if two objects are identical
 pub trait IsIdentical {

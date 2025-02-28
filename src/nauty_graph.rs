@@ -8,12 +8,12 @@ use std::os::raw::c_int;
 use ahash::RandomState;
 use itertools::izip;
 use nauty_Traces_sys::SparseGraph as NautySparse;
-use nauty_Traces_sys::{empty_graph, graph, ADDONEARC, SETWORDSNEEDED};
+use nauty_Traces_sys::{ADDONEARC, SETWORDSNEEDED, empty_graph, graph};
 
 use petgraph::{
+    EdgeType,
     graph::{Graph, IndexType},
     visit::EdgeRef,
-    EdgeType,
 };
 
 #[cfg(feature = "stable")]
@@ -472,9 +472,9 @@ mod tests {
 
     use log::debug;
     use petgraph::{
+        Directed, EdgeType, Undirected,
         algo::isomorphism::is_isomorphic,
         graph::{DiGraph, Graph, IndexType, UnGraph},
-        Directed, EdgeType, Undirected,
     };
     use testing::GraphIter;
 

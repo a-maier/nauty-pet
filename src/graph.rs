@@ -6,10 +6,10 @@ use std::ops::Deref;
 use crate::{IntoCanon, IsIdentical};
 
 use petgraph::{
+    Directed, EdgeType, IntoWeightedEdge, Undirected,
     graph::{DefaultIx, Graph, IndexType, NodeIndex},
     stable_graph::StableGraph,
     visit::EdgeRef,
-    Directed, EdgeType, IntoWeightedEdge, Undirected,
 };
 
 pub type CanonDiGraph<N, E, Ix> = CanonGraph<N, E, Directed, Ix>;
@@ -213,7 +213,7 @@ mod tests {
     };
     use rand::prelude::*;
     use rand_xoshiro::Xoshiro256Plus;
-    use testing::{randomize_labels, GraphIter};
+    use testing::{GraphIter, randomize_labels};
 
     fn log_init() {
         let _ = env_logger::builder().is_test(true).try_init();

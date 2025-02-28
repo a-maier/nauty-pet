@@ -66,9 +66,9 @@ pub use cmp::IsIdentical;
 mod tests {
     use super::prelude::*;
     use petgraph::{
+        EdgeType,
         graph::{Graph, IndexType, UnGraph},
         prelude::EdgeIndex,
-        EdgeType,
     };
 
     fn add_edge<N, E, Ty: EdgeType, Ix: IndexType>(

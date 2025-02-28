@@ -9,10 +9,10 @@ use std::os::raw::c_int;
 use std::slice;
 
 use crate::error::NautyError;
-use crate::nauty_graph::inv_perm;
 use crate::nauty_graph::DenseGraph;
 use crate::nauty_graph::RawGraphData;
 use crate::nauty_graph::SparseGraph;
+use crate::nauty_graph::inv_perm;
 
 use nauty_Traces_sys::allgroup;
 use nauty_Traces_sys::groupautomproc;
@@ -20,12 +20,12 @@ use nauty_Traces_sys::grouplevelproc;
 use nauty_Traces_sys::groupptr;
 use nauty_Traces_sys::makecosetreps;
 use nauty_Traces_sys::{
-    densenauty, optionblk, statsblk, FALSE, MTOOBIG, NTOOBIG, TRUE,
+    FALSE, MTOOBIG, NTOOBIG, TRUE, densenauty, optionblk, statsblk,
 };
-use nauty_Traces_sys::{sparsenauty, Traces, TracesOptions, TracesStats};
+use nauty_Traces_sys::{Traces, TracesOptions, TracesStats, sparsenauty};
 use petgraph::{
-    graph::{Graph, IndexType},
     EdgeType,
+    graph::{Graph, IndexType},
 };
 
 /// A graph's complete automorphism group
@@ -449,7 +449,7 @@ mod tests {
 
     use super::*;
     use log::debug;
-    use petgraph::{graph::DiGraph, visit::EdgeRef, Directed, Undirected};
+    use petgraph::{Directed, Undirected, graph::DiGraph, visit::EdgeRef};
     use testing::GraphIter;
 
     fn log_init() {

@@ -8,15 +8,15 @@ use std::fmt::Debug;
 use std::hash::Hash;
 
 use nauty_Traces_sys::{
-    densenauty, empty_graph, optionblk, statsblk, FALSE, MTOOBIG, NTOOBIG, TRUE,
+    FALSE, MTOOBIG, NTOOBIG, TRUE, densenauty, empty_graph, optionblk, statsblk,
 };
 use nauty_Traces_sys::{
-    sparsegraph, sparsenauty, Traces, TracesOptions, TracesStats, SG_FREE,
+    SG_FREE, Traces, TracesOptions, TracesStats, sparsegraph, sparsenauty,
 };
 use petgraph::graph::UnGraph;
 use petgraph::{
-    graph::{Graph, IndexType},
     EdgeType,
+    graph::{Graph, IndexType},
 };
 
 /// Find the canonical labelling for a graph
@@ -260,12 +260,12 @@ mod tests {
     use super::super::cmp::IsIdentical;
     use super::*;
     use petgraph::{
+        Directed, Undirected,
         algo::isomorphism::is_isomorphic,
         graph::{Graph, UnGraph},
-        Directed, Undirected,
     };
     use rand::prelude::*;
-    use testing::{randomize_labels, GraphIter};
+    use testing::{GraphIter, randomize_labels};
 
     use rand_xoshiro::Xoshiro256Plus;
 

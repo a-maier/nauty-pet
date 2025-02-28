@@ -2,14 +2,14 @@ use nauty_pet::canon::{
     IntoCanonNautyDense, IntoCanonNautySparse, IntoCanonTraces,
 };
 use nauty_pet::prelude::*;
-use testing::{randomize_labels, GraphIter};
+use testing::{GraphIter, randomize_labels};
 
 use criterion::{
-    black_box, criterion_group, criterion_main, BatchSize, Criterion,
+    BatchSize, Criterion, black_box, criterion_group, criterion_main,
 };
 use petgraph::{
-    graph::{Graph, IndexType, UnGraph},
     Directed, EdgeType, Undirected,
+    graph::{Graph, IndexType, UnGraph},
 };
 use rand::prelude::*;
 use rand_xoshiro::Xoshiro256Plus;
