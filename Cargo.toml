@@ -2,7 +2,7 @@
 name = "nauty-pet"
 version = "0.14.1"
 edition = "2024"
-authors = ["Andreas Maier <amaier@ifae.es>"]
+authors = ["Andreas Maier <andreas.maier@ifj.edu.pl>"]
 description = "Canonical graph labelling using nauty/Traces and petgraph"
 license = "Apache-2.0"
 readme = "Readme.md"
