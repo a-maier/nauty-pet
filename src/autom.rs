@@ -102,6 +102,9 @@ where
     fn try_into_autom_group_nauty_sparse(
         self,
     ) -> Result<AutomGroup, Self::Error> {
+        if self.node_count() == 0 {
+            return Ok(AutomGroup(vec![vec![]]))
+        }
         let mut options = optionblk::default_sparse();
         options.getcanon = FALSE;
         options.defaultptn = FALSE;
@@ -150,6 +153,9 @@ where
     ) -> Result<AutomGroup, Self::Error> {
         use NautyError::*;
 
+        if self.node_count() == 0 {
+            return Ok(AutomGroup(vec![vec![]]))
+        }
         let mut options = optionblk {
             getcanon: FALSE,
             defaultptn: FALSE,
@@ -477,6 +483,22 @@ mod tests {
     }
 
     #[test]
+    fn empty_stats() {
+        log_init();
+
+        let g = Graph::<(), ()>::new();
+        let autom = g.clone().try_into_autom_stats().unwrap();
+        assert_eq!(autom.grpsize_base, 1.);
+        assert_eq!(autom.grpsize_exp, 0);
+        let autom = g.clone().try_into_autom_stats_nauty_dense().unwrap();
+        assert_eq!(autom.grpsize_base, 1.);
+        assert_eq!(autom.grpsize_exp, 0);
+        let autom = g.try_into_autom_stats_nauty_sparse().unwrap();
+        assert_eq!(autom.grpsize_base, 1.);
+        assert_eq!(autom.grpsize_exp, 0);
+    }
+
+    #[test]
     fn triangle_stats() {
         log_init();
 
@@ -512,6 +534,19 @@ mod tests {
         *g.node_weight_mut(g.from_index(0)).unwrap() = 2;
         let autom = g.try_into_autom_group().unwrap();
         assert_eq!(autom.0, [[0, 1]]);
+    }
+
+    #[test]
+    fn empty_group() {
+        log_init();
+
+        let g = Graph::<(), ()>::new();
+        let autom = g.clone().try_into_autom_group().unwrap();
+        assert_eq!(autom.0, vec![vec![]]);
+        let autom = g.clone().try_into_autom_group_nauty_dense().unwrap();
+        assert_eq!(autom.0, vec![vec![]]);
+        let autom = g.try_into_autom_group_nauty_sparse().unwrap();
+        assert_eq!(autom.0, vec![vec![]]);
     }
 
     #[test]
