@@ -6,7 +6,7 @@ use crate::nauty_graph::inv_perm;
 
 use crate::autom::{
     AUTOM_GENERATORS, AutomGenerators, AutomStats, store_generator,
-    store_generator_traces, undo_orbit_relabelling, undo_vertex_relabelling,
+    store_generator_traces,
 };
 use std::os::raw::c_int;
 
@@ -287,24 +287,22 @@ fn relabel_to_canonical(lab: &[c_int], relabel: &[usize]) -> Vec<usize> {
     labelling
 }
 
-// Assemble the result of a getcanon run: take the generators the callback
-// stored, and map the labelling and orbits back to the petgraph's vertex
-// labels
-fn assemble(
-    lab: &[c_int],
-    orbits: &[c_int],
-    relabel: &[usize],
-    stats: AutomStats,
-) -> CanonLabelling {
-    let generators =
-        undo_vertex_relabelling(AUTOM_GENERATORS.with(|g| g.take()), relabel);
-    CanonLabelling {
-        labelling: relabel_to_canonical(lab, relabel),
-        automorphisms: AutomGenerators {
-            generators,
-            orbits: undo_orbit_relabelling(orbits, relabel),
-            stats,
-        },
+impl CanonLabelling {
+    // Assemble a getcanon run's outputs, mapping the labelling, orbits, and
+    // generators back to the petgraph's vertex labels
+    fn from_run(
+        lab: &[c_int],
+        orbits: &[c_int],
+        relabel: &[usize],
+        stats: AutomStats,
+        generators: Vec<Vec<c_int>>,
+    ) -> Self {
+        Self {
+            labelling: relabel_to_canonical(lab, relabel),
+            automorphisms: AutomGenerators::from_run(
+                generators, orbits, relabel, stats,
+            ),
+        }
     }
 }
 
@@ -426,7 +424,8 @@ where
         let mut sg = SparseGraph::from(g);
         let mut orbits = vec![0; sg.g.v.len()];
         let mut cg = sparsegraph::default();
-        AUTOM_GENERATORS.with(|g| g.borrow_mut().clear());
+        // filled by the run's callback and taken out below; must be empty here
+        debug_assert!(AUTOM_GENERATORS.with(|g| g.borrow().is_empty()));
         unsafe {
             sparsenauty(
                 &mut (&mut sg.g).into(),
@@ -440,7 +439,14 @@ where
             SG_FREE(&mut cg);
         }
         debug_assert_eq!(stats.errstatus, 0);
-        Ok(assemble(&sg.nodes.lab, &orbits, &relabel, stats.into()))
+        let generators = AUTOM_GENERATORS.with(|g| g.take());
+        Ok(CanonLabelling::from_run(
+            &sg.nodes.lab,
+            &orbits,
+            &relabel,
+            stats.into(),
+            generators,
+        ))
     }
 }
 
@@ -486,7 +492,8 @@ where
         let mut dg = DenseGraph::from(g);
         let mut orbits = vec![0; dg.n];
         let mut cg = empty_graph(dg.m, dg.n);
-        AUTOM_GENERATORS.with(|g| g.borrow_mut().clear());
+        // filled by the run's callback and taken out below; must be empty here
+        debug_assert!(AUTOM_GENERATORS.with(|g| g.borrow().is_empty()));
         unsafe {
             densenauty(
                 dg.g.as_mut_ptr(),
@@ -500,8 +507,15 @@ where
                 cg.as_mut_ptr(),
             );
         }
+        let generators = AUTOM_GENERATORS.with(|g| g.take());
         match stats.errstatus {
-            0 => Ok(assemble(&dg.nodes.lab, &orbits, &relabel, stats.into())),
+            0 => Ok(CanonLabelling::from_run(
+                &dg.nodes.lab,
+                &orbits,
+                &relabel,
+                stats.into(),
+                generators,
+            )),
             MTOOBIG => Err(MTooBig),
             NTOOBIG => Err(NTooBig),
             _ => unreachable!(),
@@ -545,7 +559,8 @@ where
         let mut sg = SparseGraph::from(g);
         let mut orbits = vec![0; sg.g.v.len()];
         let mut cg = sparsegraph::default();
-        AUTOM_GENERATORS.with(|g| g.borrow_mut().clear());
+        // filled by the run's callback and taken out below; must be empty here
+        debug_assert!(AUTOM_GENERATORS.with(|g| g.borrow().is_empty()));
         unsafe {
             Traces(
                 &mut (&mut sg.g).into(),
@@ -559,7 +574,14 @@ where
             SG_FREE(&mut cg);
         }
         debug_assert_eq!(stats.errstatus, 0);
-        Ok(assemble(&sg.nodes.lab, &orbits, &relabel, stats.into()))
+        let generators = AUTOM_GENERATORS.with(|g| g.take());
+        Ok(CanonLabelling::from_run(
+            &sg.nodes.lab,
+            &orbits,
+            &relabel,
+            stats.into(),
+            generators,
+        ))
     }
 }
 
@@ -568,7 +590,7 @@ mod tests {
     use super::super::cmp::IsIdentical;
     use super::*;
     use crate::autom::TryIntoAutomGroup;
-    use crate::nauty_graph;
+    use crate::test_util::{apply_perm, generated_group};
     use petgraph::visit::EdgeRef;
     use petgraph::{
         Directed, Undirected,
@@ -743,50 +765,6 @@ mod tests {
 
         let g = Graph::<(), (), _>::new_undirected();
         assert!(g.is_identical(&g.clone().into_canon()));
-    }
-
-    fn generated_group(gens: &[Vec<usize>], n: usize) -> BTreeSet<Vec<usize>> {
-        let id = Vec::from_iter(0..n);
-        let mut seen = BTreeSet::from([id.clone()]);
-        let mut todo = vec![id];
-        while let Some(p) = todo.pop() {
-            for g in gens {
-                let q = Vec::from_iter(p.iter().map(|&i| g[i]));
-                if seen.insert(q.clone()) {
-                    todo.push(q);
-                }
-            }
-        }
-        seen
-    }
-
-    fn apply_perm<N, E, Ty: EdgeType, Ix: IndexType>(
-        g: Graph<N, E, Ty, Ix>,
-        perm: Vec<usize>,
-    ) -> Graph<N, E, Ty, Ix> {
-        use petgraph::visit::NodeIndexable;
-
-        let mut res = Graph::with_capacity(g.node_count(), g.edge_count());
-        let edges = Vec::from_iter(g.edge_references().map(|e| {
-            let source = perm[g.to_index(e.source())];
-            let target = perm[g.to_index(e.target())];
-            (source, target)
-        }));
-        let (nodes, edge_wts) = g.into_nodes_edges();
-        let mut nodes = Vec::from_iter(nodes.into_iter().map(|n| n.weight));
-        nauty_graph::apply_perm(&mut nodes, perm);
-        for node in nodes {
-            res.add_node(node);
-        }
-        let edges = edges.into_iter().zip(edge_wts);
-        for ((source, target), w) in edges {
-            res.add_edge(
-                res.from_index(source),
-                res.from_index(target),
-                w.weight,
-            );
-        }
-        res
     }
 
     // A graph reduced to its node weights (in vertex order) and its

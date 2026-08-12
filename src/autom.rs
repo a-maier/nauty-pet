@@ -265,9 +265,10 @@ pub(crate) fn undo_orbit_relabelling(
     relabel: &[usize],
 ) -> Vec<usize> {
     let inv_relabel = inv_perm(relabel);
-    Vec::from_iter(
-        (0..relabel.len()).map(|v| inv_relabel[orbits[relabel[v]] as usize]),
-    )
+    relabel
+        .iter()
+        .map(|r| inv_relabel[orbits[*r] as usize])
+        .collect()
 }
 
 #[deprecated(note = "use `TryIntoAutomStats` instead")]
@@ -500,6 +501,23 @@ pub struct AutomGenerators {
     pub stats: AutomStats,
 }
 
+impl AutomGenerators {
+    // Assemble a run's generators and orbits, mapping them back to the
+    // petgraph's vertex labels
+    pub(crate) fn from_run(
+        generators: Vec<Vec<c_int>>,
+        orbits: &[c_int],
+        relabel: &[usize],
+        stats: AutomStats,
+    ) -> Self {
+        Self {
+            generators: undo_vertex_relabelling(generators, relabel),
+            orbits: undo_orbit_relabelling(orbits, relabel),
+            stats,
+        }
+    }
+}
+
 /// Determine a generating set of a graph's automorphism group
 pub trait TryIntoAutomGenerators {
     type Error;
@@ -563,9 +581,8 @@ where
         let relabel = std::mem::take(&mut g.relabel);
         let mut sg = SparseGraph::from(g);
         let mut orbits = vec![0; sg.g.v.len()];
-        // the callback appends to a global variable; clear anything a prior
-        // call left before collecting this run's generators
-        AUTOM_GENERATORS.with(|g| g.borrow_mut().clear());
+        // filled by the run's callback and taken out below; must be empty here
+        debug_assert!(AUTOM_GENERATORS.with(|g| g.borrow().is_empty()));
         unsafe {
             sparsenauty(
                 &mut (&mut sg.g).into(),
@@ -578,16 +595,13 @@ where
             );
         }
         debug_assert_eq!(stats.errstatus, 0);
-        let generators = undo_vertex_relabelling(
-            AUTOM_GENERATORS.with(|g| g.take()),
-            &relabel,
-        );
-        let orbits = undo_orbit_relabelling(&orbits, &relabel);
-        Ok(AutomGenerators {
+        let generators = AUTOM_GENERATORS.with(|g| g.take());
+        Ok(AutomGenerators::from_run(
             generators,
-            orbits,
-            stats: stats.into(),
-        })
+            &orbits,
+            &relabel,
+            stats.into(),
+        ))
     }
 }
 
@@ -619,9 +633,8 @@ where
         let relabel = std::mem::take(&mut g.relabel);
         let mut dg = DenseGraph::from(g);
         let mut orbits = vec![0; dg.n];
-        // the callback appends to a global variable; clear anything a prior
-        // call left before collecting this run's generators
-        AUTOM_GENERATORS.with(|g| g.borrow_mut().clear());
+        // filled by the run's callback and taken out below; must be empty here
+        debug_assert!(AUTOM_GENERATORS.with(|g| g.borrow().is_empty()));
         unsafe {
             densenauty(
                 dg.g.as_mut_ptr(),
@@ -635,19 +648,14 @@ where
                 std::ptr::null_mut(),
             );
         }
+        let generators = AUTOM_GENERATORS.with(|g| g.take());
         match stats.errstatus {
-            0 => {
-                let generators = undo_vertex_relabelling(
-                    AUTOM_GENERATORS.with(|g| g.take()),
-                    &relabel,
-                );
-                let orbits = undo_orbit_relabelling(&orbits, &relabel);
-                Ok(AutomGenerators {
-                    generators,
-                    orbits,
-                    stats: stats.into(),
-                })
-            }
+            0 => Ok(AutomGenerators::from_run(
+                generators,
+                &orbits,
+                &relabel,
+                stats.into(),
+            )),
             MTOOBIG => Err(MTooBig),
             NTOOBIG => Err(NTooBig),
             _ => unreachable!(),
@@ -657,11 +665,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{nauty_graph, prelude::CanonGraph};
+    use crate::prelude::CanonGraph;
+    use crate::test_util::{apply_perm, generated_group};
 
     use super::*;
     use log::debug;
-    use petgraph::{Directed, Undirected, graph::DiGraph, visit::EdgeRef};
+    use petgraph::{Directed, Undirected, graph::DiGraph};
     use std::collections::{BTreeMap, BTreeSet};
     use testing::GraphIter;
 
@@ -871,50 +880,6 @@ mod tests {
                 assert_eq!(g_canon, g_perm);
             }
         }
-    }
-
-    fn apply_perm<N, E, Ty: EdgeType, Ix: IndexType>(
-        g: Graph<N, E, Ty, Ix>,
-        perm: Vec<usize>,
-    ) -> Graph<N, E, Ty, Ix> {
-        use petgraph::visit::NodeIndexable;
-
-        let mut res = Graph::with_capacity(g.node_count(), g.edge_count());
-        let edges = Vec::from_iter(g.edge_references().map(|e| {
-            let source = perm[g.to_index(e.source())];
-            let target = perm[g.to_index(e.target())];
-            (source, target)
-        }));
-        let (nodes, edge_wts) = g.into_nodes_edges();
-        let mut nodes = Vec::from_iter(nodes.into_iter().map(|n| n.weight));
-        nauty_graph::apply_perm(&mut nodes, perm);
-        for node in nodes {
-            res.add_node(node);
-        }
-        let edges = edges.into_iter().zip(edge_wts);
-        for ((source, target), w) in edges {
-            res.add_edge(
-                res.from_index(source),
-                res.from_index(target),
-                w.weight,
-            );
-        }
-        res
-    }
-
-    fn generated_group(gens: &[Vec<usize>], n: usize) -> BTreeSet<Vec<usize>> {
-        let id = Vec::from_iter(0..n);
-        let mut seen = BTreeSet::from([id.clone()]);
-        let mut todo = vec![id];
-        while let Some(p) = todo.pop() {
-            for g in gens {
-                let q = Vec::from_iter(p.iter().map(|&i| g[i]));
-                if seen.insert(q.clone()) {
-                    todo.push(q);
-                }
-            }
-        }
-        seen
     }
 
     fn orbit_partition(reps: &[usize]) -> BTreeSet<BTreeSet<usize>> {

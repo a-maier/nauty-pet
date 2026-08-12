@@ -58,6 +58,9 @@ pub mod graph;
 mod nauty_graph;
 pub mod prelude;
 
+#[cfg(test)]
+mod test_util;
+
 pub use canon::IntoCanon;
 pub use canon::{IntoCanonNautySparse, TryIntoCanonTraces};
 pub use cmp::IsIdentical;
