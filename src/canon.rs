@@ -1,6 +1,14 @@
 use crate::error::NautyError;
 use crate::nauty_graph::DenseGraph;
+use crate::nauty_graph::RawGraphData;
 use crate::nauty_graph::SparseGraph;
+use crate::nauty_graph::inv_perm;
+
+use crate::autom::{
+    AUTOM_GENERATORS, AutomGenerators, AutomStats, store_generator,
+    store_generator_traces,
+};
+use std::os::raw::c_int;
 
 use std::cmp::Ord;
 use std::convert::Infallible;
@@ -255,16 +263,342 @@ where
     }
 }
 
+/// A graph's canonical labelling, with the automorphisms found on the same run
+#[derive(Clone, Debug, Default, PartialEq, PartialOrd)]
+pub struct CanonLabelling {
+    /// Each vertex's canonical position, a permutation of `0..n`
+    pub labelling: Vec<usize>,
+    /// The generators, orbits, and group size found on the same run
+    pub automorphisms: AutomGenerators,
+}
+
+// Rank the real vertices by canonical position, dropping the auxiliary
+// vertices (which have no petgraph counterpart) so the result is a clean
+// permutation of `0..n` in the petgraph's vertex labels
+fn relabel_to_canonical(lab: &[c_int], relabel: &[usize]) -> Vec<usize> {
+    let canon_pos = inv_perm(lab);
+    let num_real = relabel.len();
+    let mut order = Vec::from_iter(0..num_real);
+    order.sort_by_key(|&v| canon_pos[relabel[v]]);
+    let mut labelling = vec![0; num_real];
+    for (rank, &v) in order.iter().enumerate() {
+        labelling[v] = rank;
+    }
+    labelling
+}
+
+impl CanonLabelling {
+    // Assemble a getcanon run's outputs, mapping the labelling, orbits, and
+    // generators back to the petgraph's vertex labels
+    fn from_run(
+        lab: &[c_int],
+        orbits: &[c_int],
+        relabel: &[usize],
+        stats: AutomStats,
+        generators: Vec<Vec<c_int>>,
+    ) -> Self {
+        Self {
+            labelling: relabel_to_canonical(lab, relabel),
+            automorphisms: AutomGenerators::from_run(
+                generators, orbits, relabel, stats,
+            ),
+        }
+    }
+}
+
+/// Find the canonical labelling and automorphisms for a graph
+pub trait IntoCanonLabelling {
+    fn into_canon_labelling(self) -> CanonLabelling;
+}
+
+/// Try to find the canonical labelling and automorphisms for a graph
+pub trait TryIntoCanonLabelling {
+    type Error;
+
+    fn try_into_canon_labelling(self) -> Result<CanonLabelling, Self::Error>;
+}
+
+/// Use sparse nauty to find the canonical labelling and automorphisms
+pub trait IntoCanonLabellingNautySparse {
+    fn into_canon_labelling_nauty_sparse(self) -> CanonLabelling;
+}
+
+/// Use sparse nauty to find the canonical labelling and automorphisms
+pub trait TryIntoCanonLabellingNautySparse {
+    type Error;
+
+    fn try_into_canon_labelling_nauty_sparse(
+        self,
+    ) -> Result<CanonLabelling, Self::Error>;
+}
+
+/// Use dense nauty to find the canonical labelling and automorphisms
+pub trait IntoCanonLabellingNautyDense {
+    fn into_canon_labelling_nauty_dense(self) -> CanonLabelling;
+}
+
+/// Use dense nauty to find the canonical labelling and automorphisms
+pub trait TryIntoCanonLabellingNautyDense {
+    type Error;
+
+    fn try_into_canon_labelling_nauty_dense(
+        self,
+    ) -> Result<CanonLabelling, Self::Error>;
+}
+
+/// Use Traces to find the canonical labelling and automorphisms
+pub trait IntoCanonLabellingTraces {
+    fn into_canon_labelling_traces(self) -> CanonLabelling;
+}
+
+/// Use Traces to find the canonical labelling and automorphisms
+pub trait TryIntoCanonLabellingTraces {
+    type Error;
+
+    fn try_into_canon_labelling_traces(
+        self,
+    ) -> Result<CanonLabelling, Self::Error>;
+}
+
+impl<N, E, Ty: EdgeType, Ix: IndexType> IntoCanonLabelling
+    for Graph<N, E, Ty, Ix>
+where
+    Graph<N, E, Ty, Ix>: TryIntoCanonLabelling,
+    <Graph<N, E, Ty, Ix> as TryIntoCanonLabelling>::Error: Debug,
+{
+    fn into_canon_labelling(self) -> CanonLabelling {
+        self.try_into_canon_labelling().unwrap()
+    }
+}
+
+impl<N, E, Ty: EdgeType, Ix: IndexType> TryIntoCanonLabelling
+    for Graph<N, E, Ty, Ix>
+where
+    N: Ord,
+    E: Hash + Ord,
+{
+    type Error = NautyError;
+
+    fn try_into_canon_labelling(self) -> Result<CanonLabelling, Self::Error> {
+        self.try_into_canon_labelling_nauty_dense()
+    }
+}
+
+impl<N, E, Ty, Ix> IntoCanonLabellingNautySparse for Graph<N, E, Ty, Ix>
+where
+    Graph<N, E, Ty, Ix>: TryIntoCanonLabellingNautySparse,
+    <Graph<N, E, Ty, Ix> as TryIntoCanonLabellingNautySparse>::Error: Debug,
+{
+    fn into_canon_labelling_nauty_sparse(self) -> CanonLabelling {
+        self.try_into_canon_labelling_nauty_sparse().unwrap()
+    }
+}
+
+impl<N, E, Ty, Ix: IndexType> TryIntoCanonLabellingNautySparse
+    for Graph<N, E, Ty, Ix>
+where
+    N: Ord,
+    E: Hash + Ord,
+    Ty: EdgeType,
+{
+    type Error = Infallible;
+
+    fn try_into_canon_labelling_nauty_sparse(
+        self,
+    ) -> Result<CanonLabelling, Self::Error> {
+        if self.node_count() == 0 {
+            return Ok(CanonLabelling::default());
+        }
+        let mut options = if self.is_directed() {
+            optionblk::default_sparse_digraph()
+        } else {
+            optionblk::default_sparse()
+        };
+        options.getcanon = TRUE;
+        options.defaultptn = FALSE;
+        options.digraph = if self.is_directed() { TRUE } else { FALSE };
+        options.userautomproc = Some(store_generator);
+        let mut stats = statsblk::default();
+        let mut g = RawGraphData::from(self);
+        let relabel = std::mem::take(&mut g.relabel);
+        let mut sg = SparseGraph::from(g);
+        let mut orbits = vec![0; sg.g.v.len()];
+        let mut cg = sparsegraph::default();
+        // filled by the run's callback and taken out below; must be empty here
+        debug_assert!(AUTOM_GENERATORS.with(|g| g.borrow().is_empty()));
+        unsafe {
+            sparsenauty(
+                &mut (&mut sg.g).into(),
+                sg.nodes.lab.as_mut_ptr(),
+                sg.nodes.ptn.as_mut_ptr(),
+                orbits.as_mut_ptr(),
+                &mut options,
+                &mut stats,
+                &mut cg,
+            );
+            SG_FREE(&mut cg);
+        }
+        debug_assert_eq!(stats.errstatus, 0);
+        let generators = AUTOM_GENERATORS.with(|g| g.take());
+        Ok(CanonLabelling::from_run(
+            &sg.nodes.lab,
+            &orbits,
+            &relabel,
+            stats.into(),
+            generators,
+        ))
+    }
+}
+
+impl<N, E, Ty, Ix> IntoCanonLabellingNautyDense for Graph<N, E, Ty, Ix>
+where
+    Graph<N, E, Ty, Ix>: TryIntoCanonLabellingNautyDense,
+    <Graph<N, E, Ty, Ix> as TryIntoCanonLabellingNautyDense>::Error: Debug,
+{
+    fn into_canon_labelling_nauty_dense(self) -> CanonLabelling {
+        self.try_into_canon_labelling_nauty_dense().unwrap()
+    }
+}
+
+impl<N, E, Ty, Ix: IndexType> TryIntoCanonLabellingNautyDense
+    for Graph<N, E, Ty, Ix>
+where
+    N: Ord,
+    E: Hash + Ord,
+    Ty: EdgeType,
+{
+    type Error = NautyError;
+
+    fn try_into_canon_labelling_nauty_dense(
+        self,
+    ) -> Result<CanonLabelling, Self::Error> {
+        use NautyError::*;
+
+        if self.node_count() == 0 {
+            return Ok(CanonLabelling::default());
+        }
+        let mut options = if self.is_directed() {
+            optionblk::default_digraph()
+        } else {
+            optionblk::default()
+        };
+        options.getcanon = TRUE;
+        options.defaultptn = FALSE;
+        options.digraph = if self.is_directed() { TRUE } else { FALSE };
+        options.userautomproc = Some(store_generator);
+        let mut stats = statsblk::default();
+        let mut g = RawGraphData::from(self);
+        let relabel = std::mem::take(&mut g.relabel);
+        let mut dg = DenseGraph::from(g);
+        let mut orbits = vec![0; dg.n];
+        let mut cg = empty_graph(dg.m, dg.n);
+        // filled by the run's callback and taken out below; must be empty here
+        debug_assert!(AUTOM_GENERATORS.with(|g| g.borrow().is_empty()));
+        unsafe {
+            densenauty(
+                dg.g.as_mut_ptr(),
+                dg.nodes.lab.as_mut_ptr(),
+                dg.nodes.ptn.as_mut_ptr(),
+                orbits.as_mut_ptr(),
+                &mut options,
+                &mut stats,
+                dg.m as c_int,
+                dg.n as c_int,
+                cg.as_mut_ptr(),
+            );
+        }
+        let generators = AUTOM_GENERATORS.with(|g| g.take());
+        match stats.errstatus {
+            0 => Ok(CanonLabelling::from_run(
+                &dg.nodes.lab,
+                &orbits,
+                &relabel,
+                stats.into(),
+                generators,
+            )),
+            MTOOBIG => Err(MTooBig),
+            NTOOBIG => Err(NTooBig),
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl<N, E, Ix> IntoCanonLabellingTraces for UnGraph<N, E, Ix>
+where
+    UnGraph<N, E, Ix>: TryIntoCanonLabellingTraces,
+    <UnGraph<N, E, Ix> as TryIntoCanonLabellingTraces>::Error: Debug,
+{
+    fn into_canon_labelling_traces(self) -> CanonLabelling {
+        self.try_into_canon_labelling_traces().unwrap()
+    }
+}
+
+impl<N, E, Ix: IndexType> TryIntoCanonLabellingTraces for UnGraph<N, E, Ix>
+where
+    N: Ord,
+    E: Hash + Ord,
+{
+    type Error = Infallible;
+
+    fn try_into_canon_labelling_traces(
+        self,
+    ) -> Result<CanonLabelling, Self::Error> {
+        if self.node_count() == 0 {
+            return Ok(CanonLabelling::default());
+        }
+        let mut options = TracesOptions {
+            getcanon: TRUE,
+            defaultptn: FALSE,
+            digraph: FALSE,
+            userautomproc: Some(store_generator_traces),
+            ..Default::default()
+        };
+        let mut stats = TracesStats::default();
+        let mut g = RawGraphData::from(self);
+        let relabel = std::mem::take(&mut g.relabel);
+        let mut sg = SparseGraph::from(g);
+        let mut orbits = vec![0; sg.g.v.len()];
+        let mut cg = sparsegraph::default();
+        // filled by the run's callback and taken out below; must be empty here
+        debug_assert!(AUTOM_GENERATORS.with(|g| g.borrow().is_empty()));
+        unsafe {
+            Traces(
+                &mut (&mut sg.g).into(),
+                sg.nodes.lab.as_mut_ptr(),
+                sg.nodes.ptn.as_mut_ptr(),
+                orbits.as_mut_ptr(),
+                &mut options,
+                &mut stats,
+                &mut cg,
+            );
+            SG_FREE(&mut cg);
+        }
+        debug_assert_eq!(stats.errstatus, 0);
+        let generators = AUTOM_GENERATORS.with(|g| g.take());
+        Ok(CanonLabelling::from_run(
+            &sg.nodes.lab,
+            &orbits,
+            &relabel,
+            stats.into(),
+            generators,
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::cmp::IsIdentical;
     use super::*;
+    use crate::autom::TryIntoAutomGroup;
+    use crate::test_util::{apply_perm, generated_group};
+    use petgraph::visit::EdgeRef;
     use petgraph::{
         Directed, Undirected,
         algo::isomorphism::is_isomorphic,
         graph::{Graph, UnGraph},
     };
     use rand::prelude::*;
+    use std::collections::BTreeSet;
     use testing::{GraphIter, randomize_labels};
 
     use rand_xoshiro::Xoshiro256Plus;
@@ -431,5 +765,120 @@ mod tests {
 
         let g = Graph::<(), (), _>::new_undirected();
         assert!(g.is_identical(&g.clone().into_canon()));
+    }
+
+    // A graph reduced to its node weights (in vertex order) and its
+    // orientation-normalised, sorted edge set. Two graphs with the same
+    // labelling compare equal here regardless of edge insertion order,
+    // which `is_identical` is sensitive to but a labelling does not fix.
+    fn canon_key<N, E, Ty, Ix>(
+        g: &Graph<N, E, Ty, Ix>,
+    ) -> (Vec<N>, Vec<(usize, usize, E)>)
+    where
+        N: Clone + Ord,
+        E: Clone + Ord,
+        Ty: EdgeType,
+        Ix: IndexType,
+    {
+        use petgraph::visit::NodeIndexable;
+        let directed = g.is_directed();
+        let nodes = Vec::from_iter(g.node_weights().cloned());
+        let mut edges = Vec::from_iter(g.edge_references().map(|e| {
+            let s = g.to_index(e.source());
+            let t = g.to_index(e.target());
+            let (s, t) = if !directed && s > t { (t, s) } else { (s, t) };
+            (s, t, e.weight().clone())
+        }));
+        edges.sort();
+        (nodes, edges)
+    }
+
+    #[test]
+    fn random_canon_labelling_nauty_sparse_undirected() {
+        log_init();
+
+        for g in GraphIter::<Undirected>::default().take(1000) {
+            let cl = g.clone().try_into_canon_labelling_nauty_sparse().unwrap();
+            let canon = g.clone().into_canon_nauty_sparse();
+            assert_eq!(
+                canon_key(&apply_perm(g, cl.labelling)),
+                canon_key(&canon)
+            );
+        }
+    }
+
+    #[test]
+    fn random_canon_labelling_nauty_sparse_directed() {
+        log_init();
+
+        for g in GraphIter::<Directed>::default().take(700) {
+            let cl = g.clone().try_into_canon_labelling_nauty_sparse().unwrap();
+            let canon = g.clone().into_canon_nauty_sparse();
+            assert_eq!(
+                canon_key(&apply_perm(g, cl.labelling)),
+                canon_key(&canon)
+            );
+        }
+    }
+
+    #[test]
+    fn random_canon_labelling_nauty_dense_undirected() {
+        log_init();
+
+        for g in GraphIter::<Undirected>::default().take(1000) {
+            let cl = g.clone().try_into_canon_labelling_nauty_dense().unwrap();
+            let canon = g.clone().into_canon_nauty_dense();
+            assert_eq!(
+                canon_key(&apply_perm(g, cl.labelling)),
+                canon_key(&canon)
+            );
+        }
+    }
+
+    #[test]
+    fn random_canon_labelling_nauty_dense_directed() {
+        log_init();
+
+        for g in GraphIter::<Directed>::default().take(700) {
+            let cl = g.clone().try_into_canon_labelling_nauty_dense().unwrap();
+            let canon = g.clone().into_canon_nauty_dense();
+            assert_eq!(
+                canon_key(&apply_perm(g, cl.labelling)),
+                canon_key(&canon)
+            );
+        }
+    }
+
+    #[test]
+    fn random_canon_labelling_traces_undirected() {
+        log_init();
+
+        // Traces exercises `store_generator_traces`; also check the collected
+        // generators generate the whole automorphism group
+        for g in GraphIter::<Undirected>::default().take(1000) {
+            let n = g.node_count();
+            let cl = g.clone().try_into_canon_labelling_traces().unwrap();
+            let group = g.clone().try_into_autom_group().unwrap();
+            assert_eq!(
+                generated_group(&cl.automorphisms.generators, n),
+                BTreeSet::from_iter(group.0)
+            );
+            let canon = g.clone().into_canon_traces();
+            assert_eq!(
+                canon_key(&apply_perm(g, cl.labelling)),
+                canon_key(&canon)
+            );
+        }
+    }
+
+    #[test]
+    fn empty_canon_labelling() {
+        log_init();
+
+        let g = Graph::<(), (), _>::new_undirected();
+        let cl = g.try_into_canon_labelling().unwrap();
+        assert!(cl.labelling.is_empty());
+        assert!(cl.automorphisms.generators.is_empty());
+        assert!(cl.automorphisms.orbits.is_empty());
     }
 }

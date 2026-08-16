@@ -200,7 +200,7 @@ where
     }
 }
 
-fn undo_vertex_relabelling(
+pub(crate) fn undo_vertex_relabelling(
     autom: Vec<Vec<c_int>>,
     relabel: &[usize],
 ) -> Vec<Vec<usize>> {
@@ -228,6 +228,47 @@ extern "C" fn store_perm(p: *mut c_int, n: i32) {
 
 thread_local! {
     static AUTOM_GROUP: RefCell<Vec<Vec<c_int>>> = const { RefCell::new(Vec::new()) };
+}
+
+// nauty's `userautomproc`, called once for each generator found in the search
+pub(crate) extern "C" fn store_generator(
+    _count: c_int,
+    perm: *mut c_int,
+    _orbits: *mut c_int,
+    _numorbits: c_int,
+    _stabvertex: c_int,
+    n: c_int,
+) {
+    let perm = unsafe { slice::from_raw_parts(perm, n as usize) };
+    AUTOM_GENERATORS.with(|g| g.borrow_mut().push(perm.to_vec()));
+}
+
+// Traces' `userautomproc` has a different, three-argument signature
+pub(crate) extern "C" fn store_generator_traces(
+    _count: c_int,
+    perm: *mut c_int,
+    n: c_int,
+) {
+    let perm = unsafe { slice::from_raw_parts(perm, n as usize) };
+    AUTOM_GENERATORS.with(|g| g.borrow_mut().push(perm.to_vec()));
+}
+
+thread_local! {
+    pub(crate) static AUTOM_GENERATORS: RefCell<Vec<Vec<c_int>>> =
+        const { RefCell::new(Vec::new()) };
+}
+
+// nauty's orbit array (nauty numbering) mapped to one representative per
+// petgraph vertex, so two vertices share a value iff they share an orbit
+pub(crate) fn undo_orbit_relabelling(
+    orbits: &[c_int],
+    relabel: &[usize],
+) -> Vec<usize> {
+    let inv_relabel = inv_perm(relabel);
+    relabel
+        .iter()
+        .map(|r| inv_relabel[orbits[*r] as usize])
+        .collect()
 }
 
 #[deprecated(note = "use `TryIntoAutomStats` instead")]
@@ -449,13 +490,188 @@ where
     }
 }
 
+/// A generating set of a graph's automorphism group, with its orbits and size
+#[derive(Clone, Debug, Default, PartialEq, PartialOrd)]
+pub struct AutomGenerators {
+    /// A generating set; each element a permutation of vertices
+    pub generators: Vec<Vec<usize>>,
+    /// Orbit representative per vertex; two share a value iff in one orbit
+    pub orbits: Vec<usize>,
+    /// The group size and the orbit and generator counts
+    pub stats: AutomStats,
+}
+
+impl AutomGenerators {
+    // Assemble a run's generators and orbits, mapping them back to the
+    // petgraph's vertex labels
+    pub(crate) fn from_run(
+        generators: Vec<Vec<c_int>>,
+        orbits: &[c_int],
+        relabel: &[usize],
+        stats: AutomStats,
+    ) -> Self {
+        Self {
+            generators: undo_vertex_relabelling(generators, relabel),
+            orbits: undo_orbit_relabelling(orbits, relabel),
+            stats,
+        }
+    }
+}
+
+/// Determine a generating set of a graph's automorphism group
+pub trait TryIntoAutomGenerators {
+    type Error;
+
+    fn try_into_autom_generators(self) -> Result<AutomGenerators, Self::Error>;
+}
+
+/// Determine a generating set of a graph's automorphism group using sparse nauty
+pub trait TryIntoAutomGeneratorsNautySparse {
+    type Error;
+
+    fn try_into_autom_generators_nauty_sparse(
+        self,
+    ) -> Result<AutomGenerators, Self::Error>;
+}
+
+/// Determine a generating set of a graph's automorphism group using dense nauty
+pub trait TryIntoAutomGeneratorsNautyDense {
+    type Error;
+
+    fn try_into_autom_generators_nauty_dense(
+        self,
+    ) -> Result<AutomGenerators, Self::Error>;
+}
+
+impl<N, E, Ty, Ix> TryIntoAutomGenerators for Graph<N, E, Ty, Ix>
+where
+    N: Ord,
+    E: Hash + Ord,
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    type Error = NautyError;
+
+    fn try_into_autom_generators(self) -> Result<AutomGenerators, Self::Error> {
+        self.try_into_autom_generators_nauty_dense()
+    }
+}
+
+impl<N, E, Ty, Ix> TryIntoAutomGeneratorsNautySparse for Graph<N, E, Ty, Ix>
+where
+    N: Ord,
+    E: Hash + Ord,
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    type Error = Infallible;
+
+    fn try_into_autom_generators_nauty_sparse(
+        self,
+    ) -> Result<AutomGenerators, Self::Error> {
+        let mut options = optionblk::default_sparse();
+        options.getcanon = FALSE;
+        options.defaultptn = FALSE;
+        options.digraph = if self.is_directed() { TRUE } else { FALSE };
+        options.userautomproc = Some(store_generator);
+        let mut stats = statsblk::default();
+        let mut g = RawGraphData::from(self);
+        // remember how the vertex labels were changed so the generators and
+        // orbits can be converted back to the petgraph
+        let relabel = std::mem::take(&mut g.relabel);
+        let mut sg = SparseGraph::from(g);
+        let mut orbits = vec![0; sg.g.v.len()];
+        // filled by the run's callback and taken out below; must be empty here
+        debug_assert!(AUTOM_GENERATORS.with(|g| g.borrow().is_empty()));
+        unsafe {
+            sparsenauty(
+                &mut (&mut sg.g).into(),
+                sg.nodes.lab.as_mut_ptr(),
+                sg.nodes.ptn.as_mut_ptr(),
+                orbits.as_mut_ptr(),
+                &mut options,
+                &mut stats,
+                std::ptr::null_mut(),
+            );
+        }
+        debug_assert_eq!(stats.errstatus, 0);
+        let generators = AUTOM_GENERATORS.with(|g| g.take());
+        Ok(AutomGenerators::from_run(
+            generators,
+            &orbits,
+            &relabel,
+            stats.into(),
+        ))
+    }
+}
+
+impl<N, E, Ty, Ix> TryIntoAutomGeneratorsNautyDense for Graph<N, E, Ty, Ix>
+where
+    N: Ord,
+    E: Hash + Ord,
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    type Error = NautyError;
+
+    fn try_into_autom_generators_nauty_dense(
+        self,
+    ) -> Result<AutomGenerators, Self::Error> {
+        use NautyError::*;
+
+        let mut options = optionblk {
+            getcanon: FALSE,
+            defaultptn: FALSE,
+            digraph: if self.is_directed() { TRUE } else { FALSE },
+            userautomproc: Some(store_generator),
+            ..Default::default()
+        };
+        let mut stats = statsblk::default();
+        let mut g = RawGraphData::from(self);
+        // remember how the vertex labels were changed so the generators and
+        // orbits can be converted back to the petgraph
+        let relabel = std::mem::take(&mut g.relabel);
+        let mut dg = DenseGraph::from(g);
+        let mut orbits = vec![0; dg.n];
+        // filled by the run's callback and taken out below; must be empty here
+        debug_assert!(AUTOM_GENERATORS.with(|g| g.borrow().is_empty()));
+        unsafe {
+            densenauty(
+                dg.g.as_mut_ptr(),
+                dg.nodes.lab.as_mut_ptr(),
+                dg.nodes.ptn.as_mut_ptr(),
+                orbits.as_mut_ptr(),
+                &mut options,
+                &mut stats,
+                dg.m as c_int,
+                dg.n as c_int,
+                std::ptr::null_mut(),
+            );
+        }
+        let generators = AUTOM_GENERATORS.with(|g| g.take());
+        match stats.errstatus {
+            0 => Ok(AutomGenerators::from_run(
+                generators,
+                &orbits,
+                &relabel,
+                stats.into(),
+            )),
+            MTOOBIG => Err(MTooBig),
+            NTOOBIG => Err(NTooBig),
+            _ => unreachable!(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::{nauty_graph, prelude::CanonGraph};
+    use crate::prelude::CanonGraph;
+    use crate::test_util::{apply_perm, generated_group};
 
     use super::*;
     use log::debug;
-    use petgraph::{Directed, Undirected, graph::DiGraph, visit::EdgeRef};
+    use petgraph::{Directed, Undirected, graph::DiGraph};
+    use std::collections::{BTreeMap, BTreeSet};
     use testing::GraphIter;
 
     fn log_init() {
@@ -666,32 +882,134 @@ mod tests {
         }
     }
 
-    fn apply_perm<N, E, Ty: EdgeType, Ix: IndexType>(
-        g: Graph<N, E, Ty, Ix>,
-        perm: Vec<usize>,
-    ) -> Graph<N, E, Ty, Ix> {
-        use petgraph::visit::NodeIndexable;
+    fn orbit_partition(reps: &[usize]) -> BTreeSet<BTreeSet<usize>> {
+        let mut classes: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
+        for (vertex, &rep) in reps.iter().enumerate() {
+            classes.entry(rep).or_default().insert(vertex);
+        }
+        classes.into_values().collect()
+    }
 
-        let mut res = Graph::with_capacity(g.node_count(), g.edge_count());
-        let edges = Vec::from_iter(g.edge_references().map(|e| {
-            let source = perm[g.to_index(e.source())];
-            let target = perm[g.to_index(e.target())];
-            (source, target)
-        }));
-        let (nodes, edge_wts) = g.into_nodes_edges();
-        let mut nodes = Vec::from_iter(nodes.into_iter().map(|n| n.weight));
-        nauty_graph::apply_perm(&mut nodes, perm);
-        for node in nodes {
-            res.add_node(node);
-        }
-        let edges = edges.into_iter().zip(edge_wts);
-        for ((source, target), w) in edges {
-            res.add_edge(
-                res.from_index(source),
-                res.from_index(target),
-                w.weight,
+    fn group_orbits(
+        group: &[Vec<usize>],
+        n: usize,
+    ) -> BTreeSet<BTreeSet<usize>> {
+        (0..n)
+            .map(|vertex| group.iter().map(|perm| perm[vertex]).collect())
+            .collect()
+    }
+
+    #[test]
+    fn triangle_generators() {
+        log_init();
+
+        // C_3 for the directed triangle, S_3 for the undirected one; in both
+        // the returned generators must generate exactly that group
+        let g = DiGraph::<u8, u8>::from_edges([(0, 1), (1, 2), (2, 0)]);
+        let a = g.clone().try_into_autom_generators().unwrap();
+        assert_eq!(
+            generated_group(&a.generators, 3),
+            BTreeSet::from_iter([vec![0, 1, 2], vec![1, 2, 0], vec![2, 0, 1]])
+        );
+
+        let g = g.into_edge_type::<Undirected>();
+        let a = g.try_into_autom_generators().unwrap();
+        assert_eq!(
+            generated_group(&a.generators, 3),
+            BTreeSet::from_iter([
+                vec![0, 1, 2],
+                vec![0, 2, 1],
+                vec![1, 0, 2],
+                vec![1, 2, 0],
+                vec![2, 0, 1],
+                vec![2, 1, 0],
+            ])
+        );
+    }
+
+    #[test]
+    fn empty_generators() {
+        log_init();
+
+        let g = Graph::<(), ()>::new();
+        let a = g.clone().try_into_autom_generators().unwrap();
+        assert!(a.generators.is_empty());
+        assert!(a.orbits.is_empty());
+        assert_eq!(a.stats.grpsize_base, 1.);
+        assert_eq!(a.stats.grpsize_exp, 0);
+        let a = g.clone().try_into_autom_generators_nauty_dense().unwrap();
+        assert!(a.generators.is_empty());
+        assert!(a.orbits.is_empty());
+        let a = g.try_into_autom_generators_nauty_sparse().unwrap();
+        assert!(a.generators.is_empty());
+        assert!(a.orbits.is_empty());
+    }
+
+    #[test]
+    fn random_autom_generators_nauty_sparse_undirected() {
+        log_init();
+
+        let graphs = GraphIter::<Undirected>::default();
+        for g in graphs.take(1000) {
+            let n = g.node_count();
+            let a = g.clone().try_into_autom_generators_nauty_sparse().unwrap();
+            let group = g.clone().try_into_autom_group().unwrap();
+            assert_eq!(
+                generated_group(&a.generators, n),
+                BTreeSet::from_iter(group.0.clone())
             );
+            assert_eq!(orbit_partition(&a.orbits), group_orbits(&group.0, n));
         }
-        res
+    }
+
+    #[test]
+    fn random_autom_generators_nauty_sparse_directed() {
+        log_init();
+
+        let graphs = GraphIter::<Directed>::default();
+        for g in graphs.take(700) {
+            let n = g.node_count();
+            let a = g.clone().try_into_autom_generators_nauty_sparse().unwrap();
+            let group = g.clone().try_into_autom_group().unwrap();
+            assert_eq!(
+                generated_group(&a.generators, n),
+                BTreeSet::from_iter(group.0.clone())
+            );
+            assert_eq!(orbit_partition(&a.orbits), group_orbits(&group.0, n));
+        }
+    }
+
+    #[test]
+    fn random_autom_generators_nauty_dense_undirected() {
+        log_init();
+
+        let graphs = GraphIter::<Undirected>::default();
+        for g in graphs.take(1000) {
+            let n = g.node_count();
+            let a = g.clone().try_into_autom_generators_nauty_dense().unwrap();
+            let group = g.clone().try_into_autom_group().unwrap();
+            assert_eq!(
+                generated_group(&a.generators, n),
+                BTreeSet::from_iter(group.0.clone())
+            );
+            assert_eq!(orbit_partition(&a.orbits), group_orbits(&group.0, n));
+        }
+    }
+
+    #[test]
+    fn random_autom_generators_nauty_dense_directed() {
+        log_init();
+
+        let graphs = GraphIter::<Directed>::default();
+        for g in graphs.take(700) {
+            let n = g.node_count();
+            let a = g.clone().try_into_autom_generators_nauty_dense().unwrap();
+            let group = g.clone().try_into_autom_group().unwrap();
+            assert_eq!(
+                generated_group(&a.generators, n),
+                BTreeSet::from_iter(group.0.clone())
+            );
+            assert_eq!(orbit_partition(&a.orbits), group_orbits(&group.0, n));
+        }
     }
 }
